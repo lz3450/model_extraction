@@ -208,6 +208,52 @@ class Graph:
             file.write('}\n')
 
 
+class Model:
+
+    binary_operators: Dict[str, str] = {
+        'fmul': r'(%\S+) = fmul double (%\S+), (%\S+)'
+    }
+
+    def __init__(self, vfg: Graph) -> None:
+        self.graph = vfg.duplicate()
+        self._opt()
+
+    def _opt(self):
+        for node_name in self.graph.nodes:
+            node = self.graph.nodes[node_name]
+            match node.type:
+                case 'AddrVFGNode':
+                    node.label = node.info.strip('`')
+                case 'LoadVFGNode':
+                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                case 'CopyVFGNode':
+                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                case 'ActualRetVFGNode':
+                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                case 'ActualParmVFGNode':
+                    arg_pattern = re.compile(r'Argument `(%\S+)`\s+')
+                    arg_match = arg_pattern.match(node.info)
+                    if arg_match:
+                        node.label = arg_match.group(1)
+                    else:
+                        node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                case 'FormalParmVFGNode':
+                    pattern = re.compile(r'Argument `(%\S+)`\s+')
+                    arg_match = pattern.match(node.info)
+                    if arg_match:
+                        node.label = arg_match.group(1)
+                case 'BinaryOPVFGNode':
+                    ir = node.info.split(' in ')[0].strip('`')
+                    if re.search('fmul', node.info):
+                        pattern = re.compile(Model.binary_operators['fmul'])
+                        match = pattern.search(ir)
+                        if match:
+                            node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
+
+    def write(self, output_file: str) -> None:
+        self.graph.write(output_file, label="Model")
+
+
 if __name__ == "__main__":
 
     graph = Graph.from_dot_file('examples/example0/vfg.dot')  # Replace with the path to your DOT file
