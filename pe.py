@@ -4,10 +4,10 @@ from typing import Set, Dict, List, Tuple, Union, Optional
 import copy
 
 
-class Node:
+class VFGNode:
     def __init__(self, name: str, label: str):
         self.name = name
-        self._label = label
+        self.label = label
         self._type, self._id, self._pag_edge, self._info, self._other = self.parse_label(label)
         self.edges: List[Edge] = []
 
@@ -55,13 +55,13 @@ class Edge:
 
 
 class Graph:
-    def __init__(self, nodes: Dict[str, Node] = None, edges: List[Edge] = None) -> None:
+    def __init__(self, nodes: Dict[str, VFGNode] = None, edges: List[Edge] = None) -> None:
         self.nodes = nodes if nodes is not None else {}
         self.edges = edges if edges is not None else []
 
     @classmethod
     def from_dot_file(cls, dot_file: str) -> Graph:
-        nodes: Dict[str, Node] = {}
+        nodes: Dict[str, VFGNode] = {}
         edges: List[Edge] = []
 
         # Regular expressions to match nodes and edges
@@ -81,7 +81,7 @@ class Graph:
             if node_match:
                 node_name = node_match.group(1)
                 node_label = node_match.group(2)
-                nodes[node_name] = Node(node_name, node_label)
+                nodes[node_name] = VFGNode(node_name, node_label)
 
             # Check if the line contains an edge description
             edge_match = edge_re.match(line)
@@ -127,7 +127,7 @@ class Graph:
         # Return a new Graph object with the connected nodes and edges
         return Graph(visited_nodes, visited_edges)
 
-    def _dfs(self, node_name: str, direction: str, visited: Set[Node]) -> None:
+    def _dfs(self, node_name: str, direction: str, visited: Set[VFGNode]) -> None:
         """
         Depth-First Search helper function.
 
