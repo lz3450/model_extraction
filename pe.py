@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 from typing import Set, Dict, List, Tuple, Union, Optional
+import copy
 
 
 class Node:
@@ -146,6 +147,14 @@ class Graph:
             # Check if it's an incoming edge
             elif direction == 'target' and edge.target == node_name and self.nodes[edge.source] not in visited:
                 self._dfs(edge.source, 'target', visited)
+
+    def duplicate(self) -> Graph:
+        """
+        Create a deep copy of the graph.
+
+        :return: A deep copy of the Graph object.
+        """
+        return copy.deepcopy(self)
 
     def write(self, output_file: str, label=None) -> None:
         """
