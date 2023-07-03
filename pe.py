@@ -96,6 +96,32 @@ class Graph:
 
         return cls(nodes, edges)
 
+    def add_node(self, node_name: str, label: str) -> None:
+        """
+        Adds a new node to the graph.
+
+        :param node_name: The name of the node.
+        :param label: The label of the node.
+        """
+        if node_name in self.nodes:
+            print(f"A node with the name {node_name} already exists.")
+        else:
+            self.nodes[node_name] = VFGNode(node_name, label)
+
+    def add_edge(self, from_node: str, to_node: str) -> None:
+        """
+        Adds a new edge to the graph.
+
+        :param from_node: The name of the source node.
+        :param to_node: The name of the target node.
+        """
+        if from_node not in self.nodes or to_node not in self.nodes:
+            print("One or both of the nodes do not exist in the graph.")
+        else:
+            edge = Edge(from_node, to_node)
+            self.edges.append(edge)
+            self.nodes[from_node].edges.append(edge)
+
     def get_subgraph(self, node_name_or_id: Union[str, int]) -> Graph:
         """
         Get all nodes connected to the given node.
