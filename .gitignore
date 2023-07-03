@@ -1,0 +1,7 @@
+collected_compile_commands
+ir
+tmp
+*.ll
+*.bc
+*.dot
+*.txt
