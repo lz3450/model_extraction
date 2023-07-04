@@ -182,6 +182,15 @@ class Graph:
         """
         return copy.deepcopy(self)
 
+    def has_incoming_edges(self, node_name: str) -> bool:
+        """
+        Check if a node has any incoming edges.
+
+        :param node_name: The name of the node.
+        :return: True if the node has incoming edges, False otherwise.
+        """
+        return any(edge.target == node_name for edge in self.edges)
+
     def write(self, output_file: str, label=None) -> None:
         """
         Write the graph to a DOT file.
