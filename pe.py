@@ -12,10 +12,6 @@ class VFGNode:
         self.edges: List[Edge] = []
 
     @property
-    def label(self) -> str:
-        return self._label
-
-    @property
     def type(self) -> str:
         return self._type
 
@@ -275,15 +271,23 @@ class Model:
 
 if __name__ == "__main__":
 
-    graph = Graph.from_dot_file('examples/example0/vfg.dot')  # Replace with the path to your DOT file
-
-    # Get connected nodes for a specific node
+    graph = Graph.from_dot_file('examples/example0/vfg.dot')
     node_name = "Node0x55aefd357cf0"
     node_id = 16
     subgraph = graph.get_subgraph(node_id)
 
-    print(f"\nNodes connected to {node_name}:")
-    for node_name in subgraph.nodes:
-        print(subgraph.nodes[node_name])
+    subgraph.write("example0_subgraph.dot")
+    m = Model(subgraph)
+    m.write("example0.dot")
 
-    subgraph.write("subgraph.dot")
+    # graph = Graph.from_dot_file('examples/example1/vfg.dot')
+    # node_id = 42
+    # subgraph = graph.get_subgraph(node_id)
+
+    # print(f"\nNodes connected to {node_name}:")
+    # for node_name in subgraph.nodes:
+    #     print(subgraph.nodes[node_name])
+
+    # subgraph.write("example1_subgraph.dot")
+    # m = Model(subgraph)
+    # m.write("example1.dot")
