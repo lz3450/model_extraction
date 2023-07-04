@@ -258,6 +258,16 @@ class Model:
                         match = pattern.search(ir)
                         if match:
                             node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
+                case 'ActualRetVFGNode':
+                        pattern = re.compile(r'(%\S+) = call double (@\S+)\((.*?)%\S+(?:, (.*?)%\S+)*\)')
+                        if match:
+                            params = []
+                            retval = match.group(1)
+                            func_name = match.group(2)
+                            for param in match.groups()[2:]:
+                                if param:
+                                    params.append(param)
+                        node.label = f"{retval} = {func_name}({params.join(',')})"
 
     def write(self, output_file: str) -> None:
         self.graph.write(output_file, label="Model")
