@@ -5,3 +5,8 @@ tmp
 *.bc
 *.dot
 *.txt
+
+!**/example0/vfg.dot
+!**/example0/example0.dot
+!**/example1/vfg.dot
+!**/example1/example1.dot
