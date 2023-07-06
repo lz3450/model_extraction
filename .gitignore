@@ -5,6 +5,7 @@ tmp
 *.bc
 *.dot
 *.txt
+*.svg
 
 !**/example0/vfg.dot
 !**/example0/example0.dot
