@@ -51,6 +51,22 @@ class VFGNode:
     def ir(self) -> str:
         return self.info.split(' in ')[0].strip('`')
 
+    @property
+    def function(self) -> Optional[str]:
+        if self.info:
+            match = re.search(r'in \[(\S+)\] BB', self.info)
+            if match:
+                return match.group(1)
+        return None
+
+    @property
+    def basic_block(self) -> Optional[str]:
+        if self.info:
+            match = re.search(r'BB `(\S+)`', self.info)
+            if match:
+                return match.group(1)
+        return None
+
     def parse_label(self, label: str) -> Tuple[str, int, str, Optional[str], Optional[str]]:
         fields = label.split(',\\n')
         node_type, node_id = fields[0].split(" ID: ")
