@@ -233,8 +233,6 @@ class Model:
                     node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
                 case 'CopyVFGNode':
                     node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
-                case 'ActualRetVFGNode':
-                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
                 case 'ActualParmVFGNode':
                     arg_pattern = re.compile(r'Argument `(%\S+)`\s+')
                     arg_match = arg_pattern.match(node.info)
@@ -262,15 +260,19 @@ class Model:
                         ptrvar = match.group(4)
                     node.label = f'{ptrvar}.{element}'
                 case 'ActualRetVFGNode':
-                        pattern = re.compile(r'(%\S+) = call double (@\S+)\((.*?)%\S+(?:, (.*?)%\S+)*\)')
-                        if match:
-                            params = []
-                            retval = match.group(1)
-                            func_name = match.group(2)
-                            for param in match.groups()[2:]:
-                                if param:
-                                    params.append(param)
-                        node.label = f"{retval} = {func_name}({params.join(',')})"
+                    pattern = re.compile(r'(%\S+) = call (\S+) (@\S+)\((.+)\)')
+                    param_pattern = re.compile(r'(.+) (%\S+)')
+                    match = pattern.search(node.ir)
+                    if match:
+                        retval = match.group(1)
+                        func_name = match.group(3)
+                        params = match.group(4)
+                        param_labels = []
+                        for param in params.split(', '):
+                            param_match = param_pattern.search(param)
+                            if param_match:
+                                param_labels.append(param_match.group(2))
+                    node.label = f"{retval} = {func_name}({', '.join(param_labels)})"
 
     def write(self, output_file: str) -> None:
         self.graph.write(output_file, label="Model")
