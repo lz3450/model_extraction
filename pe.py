@@ -1,7 +1,23 @@
 from __future__ import annotations
 import re
 from typing import Set, Dict, List, Tuple, Union, Optional
-import copy
+import logging
+
+
+def config_logger(logger: logging.Logger):
+    logger.propagate = False
+    # create console handler and set level to debug
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # create formatter
+    formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
+
+    # add formatter to ch
+    ch.setFormatter(formatter)
+
+    # add ch to logger
+    logger.addHandler(ch)
 
 
 class VFGNode:
