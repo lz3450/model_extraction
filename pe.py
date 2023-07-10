@@ -31,6 +31,10 @@ class VFGNode:
     def other(self) -> Optional[str]:
         return self._other
 
+    @property
+    def ir(self) -> str:
+        return self.info.split(' in ')[0].strip('`')
+
     def parse_label(self, label: str) -> Tuple[str, int, str, Optional[str], Optional[str]]:
         fields = label.split(',\\n')
         node_type, node_id = fields[0].split(" ID: ")
