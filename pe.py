@@ -254,6 +254,13 @@ class Model:
                         match = pattern.search(ir)
                         if match:
                             node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
+                case 'GepVFGNode':
+                    pattern = re.compile(r'(%\S+) = getelementptr inbounds (%\S+), (%\S+) (%\S+), (\S+) (\d+), (\S+) (\d+)')
+                    match = pattern.search(node.ir)
+                    if match:
+                        element = match.group(1)
+                        ptrvar = match.group(4)
+                    node.label = f'{ptrvar}.{element}'
                 case 'ActualRetVFGNode':
                         pattern = re.compile(r'(%\S+) = call double (@\S+)\((.*?)%\S+(?:, (.*?)%\S+)*\)')
                         if match:
