@@ -76,6 +76,9 @@ class VFGNode:
         other = fields[3].strip() if len(fields) > 3 else None
         return node_type, node_id, pag_edge, info, other
 
+    def __str__(self) -> str:
+        return f"Node(id='{self.id}', type='{self.type}', name='{self.name}', ir='{self.ir}', func='{self.function}', BB='{self.basic_block}')"
+
     def __repr__(self) -> str:
         return f"Node(id='{self.id}', type='{self.type}', name='{self.name}', pag_edge='{self.pag_edge}', info='{self.info}', other='{self.other}')"
 
