@@ -234,6 +234,18 @@ class Graph:
         """
         return any(edge.target == node_name for edge in self.edges)
 
+    def search_nodes(self, type: str, label: str, function: str, basic_block: str) -> Set[VFGNode]:
+        matching_nodes = set()
+        for node in self.nodes.values():
+            if (
+                node.type == type and
+                node.function == function and
+                node.basic_block == basic_block and
+                re.search(f'{label} = ', node.ir)
+            ):
+                matching_nodes.add(node)
+        return matching_nodes
+
     def write(self, output_file: str, label=None) -> None:
         """
         Write the graph to a DOT file.
