@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 from typing import Set, Dict, List, Tuple, Union, Optional
+import functools
 import logging
 
 
@@ -174,64 +175,13 @@ class Graph:
             self.edges.append(edge)
             self.nodes[from_node].edges.append(edge)
 
-    def get_subgraph(self, node_name_or_id: Union[str, int]) -> Graph:
-        """
-        Get all nodes connected to the given node.
-
-        :param node_name_or_id: The name or ID of the node.
-        :return: A Graph object containing nodes connected to the given node.
-        """
-        if isinstance(node_name_or_id, int):
-            # Convert node ID to node name
-            for node in self.nodes.values():
-                if node.id == node_name_or_id:
-                    node_name = node.name
-                    break
-            else:
-                print(f"No node found with ID {node_name_or_id}")
-                return Graph.from_nodes_and_edges({}, [])
-        else:
-            node_name = node_name_or_id
-
-        source_visited = set()
-        self._dfs(node_name, 'source', source_visited)
-        target_visited = set()
-        self._dfs(node_name, 'target', target_visited)
-
-        # Get the nodes and edges for the subgraph
-        visited_nodes = {node.name: node for node in source_visited | target_visited}
-        visited_edges = [edge for edge in self.edges if edge.source in visited_nodes or edge.target in visited_nodes]
-
-        # Return a new Graph object with the connected nodes and edges
-        return Graph(visited_nodes, visited_edges)
-
-    def _dfs(self, node_name: str, direction: str, visited: Set[VFGNode]) -> None:
-        """
-        Depth-First Search helper function.
-
-        :param node_name: The name of the current node.
-        :param direction: 'source' or 'target' to control the direction of the search.
-        :param visited: Set of visited nodes.
-        """
-        # Mark the current node as visited
-        current_node = self.nodes[node_name]
-        visited.add(current_node)
-
-        # Recur for all connected nodes
-        for edge in self.edges:
-            # Check if it's an outgoing edge
-            if direction == 'source' and edge.source == node_name and self.nodes[edge.target] not in visited:
-                self._dfs(edge.target, 'source', visited)
-            # Check if it's an incoming edge
-            elif direction == 'target' and edge.target == node_name and self.nodes[edge.source] not in visited:
-                self._dfs(edge.source, 'target', visited)
-
     def duplicate(self) -> Graph:
         """
         Create a deep copy of the graph.
 
         :return: A deep copy of the Graph object.
         """
+        import copy
         return copy.deepcopy(self)
 
     def has_incoming_edges(self, node_name: str) -> bool:
@@ -287,39 +237,73 @@ class Model:
         'fmul': r'(%\S+) = fmul double (%\S+), (%\S+)'
     }
 
-    def __init__(self, vfg: Graph) -> None:
-        self.graph = vfg.duplicate()
-        self._opt()
+    def __init__(self, vfg: Graph, node_name_or_id: Union[str, int]) -> None:
+        self.vfg = vfg
 
-    def _opt(self):
-        for node_name in self.graph.nodes:
-            node = self.graph.nodes[node_name]
+        if isinstance(node_name_or_id, int):
+            # Convert node ID to node name
+            for node in self.vfg.nodes.values():
+                if node.id == node_name_or_id:
+                    self._node_name = node.name
+                    break
+            else:
+                raise ValueError(f"No node found with ID {node_name_or_id}")
+        else:
+            self._node_name = node_name_or_id
+
+        self._extract_model()
+
+    @property
+    def node_name(self) -> str:
+        return self._node_name
+
+    def _extract_model(self):
+        self.subvfg = self.get_subvfg()
+        self.model = self.subvfg.duplicate()
+        self._extract()
+
+    def _extract(self):
+        for node_name in self.model.nodes:
+            node = self.model.nodes[node_name]
             match node.type:
                 case 'AddrVFGNode':
-                    node.label = node.info.strip('`')
+                    alloca_pattern = re.compile(r'(\S+) = alloca (.+)')
+                    match = alloca_pattern.search(node.ir)
+                    if match:
+                        node.label = match.group(1)
+                    else:
+                        node.label = node.ir
                 case 'LoadVFGNode':
-                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                    node.label = node.ir.split(' = ')[0]
+                case 'StoreVFGNode':
+                    store_pattern = re.compile(r'store \S+ (%\S+), \S+ (%\S+),')
+                    match = store_pattern.search(node.ir)
+                    if match:
+                        node.label = f'{match.group(1)} → {match.group(2)}'
+                    else:
+                        node.label = node.ir
                 case 'CopyVFGNode':
-                    node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                    node.label = node.ir.split(' = ')[0]
                 case 'ActualParmVFGNode':
                     arg_pattern = re.compile(r'Argument `(%\S+)`\s+')
                     arg_match = arg_pattern.match(node.info)
                     if arg_match:
                         node.label = arg_match.group(1)
                     else:
-                        node.label = node.info.split(' in ')[0].strip('`').split(' = ')[0]
+                        node.label = node.ir.split(' = ')[0]
                 case 'FormalParmVFGNode':
                     pattern = re.compile(r'Argument `(%\S+)`\s+')
                     arg_match = pattern.match(node.info)
                     if arg_match:
                         node.label = arg_match.group(1)
                 case 'BinaryOPVFGNode':
-                    ir = node.info.split(' in ')[0].strip('`')
-                    if re.search('fmul', node.info):
+                    if re.search('fmul', node.ir):
                         pattern = re.compile(Model.binary_operators['fmul'])
-                        match = pattern.search(ir)
+                        match = pattern.search(node.ir)
                         if match:
                             node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
+                        else:
+                            node.label = node.ir
                 case 'GepVFGNode':
                     pattern = re.compile(r'(%\S+) = getelementptr inbounds (%\S+), (%\S+) (%\S+), (\S+) (\d+), (\S+) (\d+)')
                     match = pattern.search(node.ir)
@@ -341,30 +325,83 @@ class Model:
                             if param_match:
                                 param_labels.append(param_match.group(2))
                     node.label = f"{retval} = {func_name}({', '.join(param_labels)})"
+                    if not self.vfg.has_incoming_edges(node.name):
+                        param_nodes = functools.reduce(lambda a, b: a | b, [self.vfg.search_nodes('ActualParmVFGNode', label, node.function, node.basic_block) for label in param_labels])
+                        for param_node in param_nodes:
+                            self.vfg.add_edge(param_node.name, node.name)
+                        self._extract_model()
+                case _:
+                    raise ValueError("Unknown VFG node type.")
+
+    def _dfs(self, node_name: str, direction: str, visited: Set[VFGNode]) -> None:
+        """
+        Depth-First Search helper function.
+
+        :param node_name: The name of the current node.
+        :param direction: 'source' or 'target' to control the direction of the search.
+        :param visited: Set of visited nodes.
+        """
+        # Mark the current node as visited
+        current_node = self.vfg.nodes[node_name]
+        visited.add(current_node)
+
+        # Recur for all connected nodes
+        for edge in self.vfg.edges:
+            # Check if it's an outgoing edge
+            if direction == 'source' and edge.source == node_name and self.vfg.nodes[edge.target] not in visited:
+                self._dfs(edge.target, 'source', visited)
+            # Check if it's an incoming edge
+            elif direction == 'target' and edge.target == node_name and self.vfg.nodes[edge.source] not in visited:
+                self._dfs(edge.source, 'target', visited)
+
+    def get_subvfg(self) -> Graph:
+        """
+        Get all nodes connected to the given node.
+
+        :return: A Graph object containing nodes connected to the given node.
+        """
+        source_visited: Set[VFGNode] = set()
+        self._dfs(self._node_name, 'source', source_visited)
+        target_visited: Set[VFGNode] = set()
+        self._dfs(self._node_name, 'target', target_visited)
+
+        # Get the nodes and edges for the subgraph
+        visited_nodes = {node.name: node for node in source_visited | target_visited}
+        visited_edges = [edge for edge in self.vfg.edges if edge.source in visited_nodes or edge.target in visited_nodes]
+
+        # Return a new Graph object with the connected nodes and edges
+        return Graph(visited_nodes, visited_edges)
+
+    def write_subvfg(self, output_file: str) -> None:
+        self.subvfg.write(output_file, label="Sub VFG")
 
     def write(self, output_file: str) -> None:
-        self.graph.write(output_file, label="Model")
+        self.model.write(output_file, label="Model")
 
 
 if __name__ == "__main__":
-
-    graph = Graph.from_dot_file('examples/example0/vfg.dot')
-    node_name = "Node0x55aefd357cf0"
-    node_id = 16
-    subgraph = graph.get_subgraph(node_id)
-
-    subgraph.write("example0_subgraph.dot")
-    m = Model(subgraph)
-    m.write("example0.dot")
-
-    # graph = Graph.from_dot_file('examples/example1/vfg.dot')
-    # node_id = 42
+    # graph = Graph.from_dot_file('examples/example0/vfg.dot')
+    # node_name = "Node0x55aefd357cf0"
+    # node_id = 16
     # subgraph = graph.get_subgraph(node_id)
-
-    # print(f"\nNodes connected to {node_name}:")
-    # for node_name in subgraph.nodes:
-    #     print(subgraph.nodes[node_name])
-
-    # subgraph.write("example1_subgraph.dot")
+    # subgraph.write("examples/example0/subgraph.dot")
     # m = Model(subgraph)
-    # m.write("example1.dot")
+    # m.write("examples/example0/model.dot")
+
+    vfg = Graph.from_dot_file('examples/example1/vfg.dot')
+    node_id = 42
+    m = Model(vfg, node_id)
+    m.write_subvfg('examples/example1/subvfg.dot')
+    m.write('examples/example1/model.dot')
+
+    vfg = Graph.from_dot_file('tmp/vfg.dot')
+    node_name = 'Node0x5631daa31250'
+    # node_id = 55971
+    node_id = 77788
+    m = Model(vfg, node_id)
+    m.write_subvfg('tmp/subvfg.dot')
+    m.write("tmp/model.dot")
+    # subgraph = graph.get_subgraph(46415)
+    # subgraph.write("tmp/x118_subgraph.dot")
+    # m = Model(subgraph)
+    # m.write("tmp/x118_model.dot")
