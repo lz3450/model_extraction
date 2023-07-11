@@ -98,12 +98,21 @@ class Edge:
 
 
 class Graph:
+    logger = logging.getLogger(__qualname__)
+    config_logger(logger)
+
     def __init__(self, nodes: Dict[str, VFGNode] = None, edges: List[Edge] = None) -> None:
         self.nodes = nodes if nodes is not None else {}
         self.edges = edges if edges is not None else []
 
+        self.logger = logging.getLogger(__name__)
+        config_logger(self.logger)
+
     @classmethod
     def from_dot_file(cls, dot_file: str) -> Graph:
+
+        cls.logger.info(f'Building graph from dot file "{dot_file}"')
+
         nodes: Dict[str, VFGNode] = {}
         edges: List[Edge] = []
 
