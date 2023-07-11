@@ -68,9 +68,17 @@ class VFGNode:
         return None
 
     def parse_label(self, label: str) -> Tuple[str, int, str, Optional[str], Optional[str]]:
-        fields = label.split(',\\n')
-        node_type, node_id = fields[0].split(" ID: ")
-        node_id = int(node_id)
+        fields = label.split(r',\n')
+        try:
+            node_type, node_id = fields[0].split(" ID: ")
+        except ValueError:
+            print(fields)
+            exit(1)
+        try:
+            node_id = int(node_id)
+        except ValueError:
+            print(fields)
+            exit(1)
         pag_edge = fields[1].strip()
         info = fields[2].strip() if len(fields) > 2 else None
         other = fields[3].strip() if len(fields) > 3 else None
