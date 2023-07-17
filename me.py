@@ -182,6 +182,14 @@ class Graph:
             nodes[edge.target].add_edge(edge)
 
         return cls(nodes, edges)
+    
+    @property
+    def node_number(self):
+        return len(self._nodes)
+    
+    @property
+    def edge_number(self):
+        return len(self._edges)
 
     def add_node(self, node_name: str, info: Optional[str] = None) -> None:
         """
@@ -361,7 +369,7 @@ class Model:
             self.logger.debug("Transform iteration: %d", i)
             subvfg = self._vfg.get_subgraph(node_name_or_id)
             model = self._transform(subvfg.duplicate())
-            self.logger.debug("#Node in Model: %d", len(model))
+            self.logger.debug("# Node in Model: %d", len(model))
         self._subvfg = subvfg
         # self._model = model
         self._model = self._opt(model)
@@ -502,7 +510,11 @@ class Model:
 
 
 if __name__ == "__main__":
+    logger = logging.getLogger(__name__)
+    config_logger(logger)
+
     setrecursionlimit(5000)
+
 
     # vfg = Graph.from_dot_file('examples/example0/vfg.dot')
     # svfg = Graph.from_dot_file('examples/example0/full_svfg.dot')
@@ -517,9 +529,12 @@ if __name__ == "__main__":
     # model.write("examples/example1/model.dot")
 
     vfg = Graph.from_dot_file('tmp/vfg.dot')
+    logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
     # svfg = Graph.from_dot_file('tmp/full_svfg.dot')
+    node_id = 77793
     # model = Model(vfg, 77788)
     # model = Model(vfg, 1503)
-    model = Model(vfg, 77793)
+    logger.info("Starting node: %s", vfg[vfg.get_name_from_id(node_id)])
+    model = Model(vfg, node_id)
     model.write_subvfg("tmp/subvfg.dot")
     model.write("tmp/model.dot")
