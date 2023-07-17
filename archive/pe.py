@@ -1,18 +1,20 @@
 from __future__ import annotations
-import re
 from typing import Set, Dict, List, Tuple, Union, Optional
+import re
 import functools
+from copy import deepcopy
 import logging
 
 
 def config_logger(logger: logging.Logger):
+    logger.setLevel(logging.DEBUG)
     logger.propagate = False
     # create console handler and set level to debug
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
 
     # create formatter
-    formatter = logging.Formatter('[%(name)s] %(levelname)s: %(message)s')
+    formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
     # add formatter to ch
     ch.setFormatter(formatter)
@@ -21,7 +23,7 @@ def config_logger(logger: logging.Logger):
     logger.addHandler(ch)
 
 
-class VFGNode:
+class Node:
     def __init__(self, name: str, label: str):
         self.name = name
         self.label = label
@@ -49,8 +51,8 @@ class VFGNode:
         return self._other
 
     @property
-    def ir(self) -> str:
-        return self.info.split(' in ')[0].strip('`')
+    def ir(self) -> Optional[str]:
+        return self.info.split(' in ')[0].strip('`') if self._info is not None else None
 
     @property
     def function(self) -> Optional[str]:
@@ -100,9 +102,9 @@ class Edge:
 
 class Graph:
     logger = logging.getLogger(__qualname__)
-    config_logger(logger)
+    # config_logger(logger)
 
-    def __init__(self, nodes: Dict[str, VFGNode] = None, edges: List[Edge] = None) -> None:
+    def __init__(self, nodes: Dict[str, Node] = None, edges: List[Edge] = None) -> None:
         self.nodes = nodes if nodes is not None else {}
         self.edges = edges if edges is not None else []
 
@@ -114,7 +116,7 @@ class Graph:
 
         cls.logger.info(f'Building graph from dot file "{dot_file}"')
 
-        nodes: Dict[str, VFGNode] = {}
+        nodes: Dict[str, Node] = {}
         edges: List[Edge] = []
 
         # Regular expressions to match nodes and edges
@@ -134,7 +136,7 @@ class Graph:
             if node_match:
                 node_name = node_match.group(1)
                 node_label = node_match.group(2)
-                nodes[node_name] = VFGNode(node_name, node_label)
+                nodes[node_name] = Node(node_name, node_label)
 
             # Check if the line contains an edge description
             edge_match = edge_re.match(line)
@@ -159,7 +161,7 @@ class Graph:
         if node_name in self.nodes:
             print(f"A node with the name {node_name} already exists.")
         else:
-            self.nodes[node_name] = VFGNode(node_name, label)
+            self.nodes[node_name] = Node(node_name, label)
 
     def add_edge(self, from_node: str, to_node: str) -> None:
         """
@@ -181,8 +183,7 @@ class Graph:
 
         :return: A deep copy of the Graph object.
         """
-        import copy
-        return copy.deepcopy(self)
+        return deepcopy(self)
 
     def has_incoming_edges(self, node_name: str) -> bool:
         """
@@ -193,7 +194,7 @@ class Graph:
         """
         return any(edge.target == node_name for edge in self.edges)
 
-    def search_nodes(self, type: str, label: str, function: str, basic_block: str) -> Set[VFGNode]:
+    def search_nodes(self, type: str, label: str, function: str, basic_block: str) -> Set[Node]:
         matching_nodes = set()
         for node in self.nodes.values():
             if (
@@ -232,9 +233,12 @@ class Graph:
 
 
 class Model:
+    logger = logging.getLogger(__qualname__)
+    config_logger(logger)
 
     binary_operators: Dict[str, str] = {
-        'fmul': r'(%\S+) = fmul double (%\S+), (%\S+)'
+        'fmul': r'(%\S+) = fmul double (%\S+), (%\S+)',
+        'fadd': r'(%\S+) = fadd double (%\S+), (%\S+)'
     }
 
     def __init__(self, vfg: Graph, node_name_or_id: Union[str, int]) -> None:
@@ -304,13 +308,20 @@ class Model:
                             node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
                         else:
                             node.label = node.ir
+                    elif re.search('fadd', node.ir):
+                        pattern = re.compile(Model.binary_operators['fadd'])
+                        match = pattern.search(node.ir)
+                        if match:
+                            node.label = f'{match.group(1)} = fmul({match.group(2)}, {match.group(3)})'
+                        else:
+                            node.label = node.ir
                 case 'GepVFGNode':
                     pattern = re.compile(r'(%\S+) = getelementptr inbounds (%\S+), (%\S+) (%\S+), (\S+) (\d+), (\S+) (\d+)')
                     match = pattern.search(node.ir)
                     if match:
                         element = match.group(1)
                         ptrvar = match.group(4)
-                    node.label = f'{ptrvar}.{element}'
+                        node.label = f'{ptrvar}.{element}'
                 case 'ActualRetVFGNode':
                     pattern = re.compile(r'(%\S+) = call (\S+) (@\S+)\((.+)\)')
                     param_pattern = re.compile(r'(.+) (%\S+)')
@@ -324,16 +335,34 @@ class Model:
                             param_match = param_pattern.search(param)
                             if param_match:
                                 param_labels.append(param_match.group(2))
-                    node.label = f"{retval} = {func_name}({', '.join(param_labels)})"
-                    if not self.vfg.has_incoming_edges(node.name):
-                        param_nodes = functools.reduce(lambda a, b: a | b, [self.vfg.search_nodes('ActualParmVFGNode', label, node.function, node.basic_block) for label in param_labels])
-                        for param_node in param_nodes:
-                            self.vfg.add_edge(param_node.name, node.name)
-                        self._extract_model()
+                        node.label = f"{retval} = {func_name}({', '.join(param_labels)})"
+                        if not self.vfg.has_incoming_edges(node.name):
+                            param_nodes = functools.reduce(lambda a, b: a | b, [self.vfg.search_nodes('ActualParmVFGNode', label, node.function, node.basic_block) for label in param_labels])
+                            for param_node in param_nodes:
+                                self.vfg.add_edge(param_node.name, node.name)
+                            self._extract_model()
+                case 'FormalINSVFGNode':
+                    node.label = node.ir
+                case 'FormalOUTSVFGNode':
+                    node.label = node.ir
+                case 'ActualINSVFGNode':
+                    node.label = node.ir
+                case 'ActualOUTSVFGNode':
+                    node.label = node.ir
+                case 'IntraPHIVFGNode':
+                    node.label = node.ir
+                case 'BranchVFGNode':
+                    node.label = node.ir
+                case 'FormalRetVFGNode':
+                    node.label = node.ir
+                case 'CmpVFGNode':
+                    node.label = node.ir
+                case 'NullPtrVFGNode':
+                    node.label = node.ir
                 case _:
-                    raise ValueError("Unknown VFG node type.")
+                    raise ValueError(f'Unknown VFG node type "{node.type}".')
 
-    def _dfs(self, node_name: str, direction: str, visited: Set[VFGNode]) -> None:
+    def _dfs(self, node_name: str, direction: str, visited: Set[Node]) -> None:
         """
         Depth-First Search helper function.
 
@@ -354,19 +383,49 @@ class Model:
             elif direction == 'target' and edge.target == node_name and self.vfg.nodes[edge.source] not in visited:
                 self._dfs(edge.source, 'target', visited)
 
+    def _bfs(self, node_name: str) -> Set[Node]:
+        current_node = self.vfg.nodes[node_name]
+        all_visited = {current_node}
+
+        pass_num = 1
+        last_visited = all_visited
+        while True:
+            new_visited = set()
+            node_num = len(all_visited)
+            self.logger.debug('Pass: %3d\t#Node: %6d', pass_num, node_num)
+            for node in last_visited:
+                for edge in self.vfg.edges:
+                    if edge.source == node.name:
+                        new_visited.add(self.vfg.nodes[edge.target])
+                    elif edge.target == node.name:
+                        new_visited.add(self.vfg.nodes[edge.source])
+            all_visited = all_visited | new_visited
+            last_visited = new_visited
+            if len(all_visited) - node_num == 0:
+                break
+            if pass_num >= 10:
+                break
+            pass_num += 1
+
+        return all_visited
+
     def get_subvfg(self) -> Graph:
         """
         Get all nodes connected to the given node.
 
         :return: A Graph object containing nodes connected to the given node.
         """
-        source_visited: Set[VFGNode] = set()
-        self._dfs(self._node_name, 'source', source_visited)
-        target_visited: Set[VFGNode] = set()
-        self._dfs(self._node_name, 'target', target_visited)
+        # source_visited: Set[VFGNode] = set()
+        # self._dfs(self._node_name, 'source', source_visited)
+        # target_visited: Set[VFGNode] = set()
+        # self._dfs(self._node_name, 'target', target_visited)
 
-        # Get the nodes and edges for the subgraph
-        visited_nodes = {node.name: node for node in source_visited | target_visited}
+        # # Get the nodes and edges for the subgraph
+        # visited_nodes = {node.name: node for node in (source_visited | target_visited)}
+        # visited_edges = [edge for edge in self.vfg.edges if edge.source in visited_nodes or edge.target in visited_nodes]
+
+        visited = self._bfs(self._node_name)
+        visited_nodes = {node.name: node  for node in visited}
         visited_edges = [edge for edge in self.vfg.edges if edge.source in visited_nodes or edge.target in visited_nodes]
 
         # Return a new Graph object with the connected nodes and edges
@@ -388,20 +447,17 @@ if __name__ == "__main__":
     # m = Model(subgraph)
     # m.write("examples/example0/model.dot")
 
-    vfg = Graph.from_dot_file('examples/example1/vfg.dot')
-    node_id = 42
-    m = Model(vfg, node_id)
-    m.write_subvfg('examples/example1/subvfg.dot')
-    m.write('examples/example1/model.dot')
+    # vfg = Graph.from_dot_file('examples/example1/vfg.dot')
+    # node_id = 42
+    # m = Model(vfg, node_id)
+    # m.write_subvfg('examples/example1/subvfg.dot')
+    # m.write('examples/example1/model.dot')
 
     vfg = Graph.from_dot_file('tmp/vfg.dot')
-    node_name = 'Node0x5631daa31250'
+    # node_name = 'Node0x5631daa31250'
     # node_id = 55971
     node_id = 77788
+    # node_id = 1508
     m = Model(vfg, node_id)
     m.write_subvfg('tmp/subvfg.dot')
     m.write("tmp/model.dot")
-    # subgraph = graph.get_subgraph(46415)
-    # subgraph.write("tmp/x118_subgraph.dot")
-    # m = Model(subgraph)
-    # m.write("tmp/x118_model.dot")
