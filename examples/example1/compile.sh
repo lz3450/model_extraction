@@ -10,4 +10,5 @@ source ~/SVF/setup.sh >/dev/null
 # wpa -ander -svfg -dump-vfg -stat=false -write-svfg=svf.txt example1.ll
 # saber -ander -dump-slice example1.ll > /dev/null
 
-ddfg example1.ll
+ddfg -write-svfg=svfg.txt example1.ll
+opt -S example1.svf.bc -o example1.svf.ll
