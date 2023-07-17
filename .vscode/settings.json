@@ -1,11 +1,17 @@
 {
     "cSpell.words": [
+        "aefd",
+        "callsite",
         "fmul",
+        "INSVFG",
         "OPVFG",
+        "OUTSVFG",
         "penwidth",
+        "PHIVFG",
         "ptrvar",
         "rankdir",
         "sitofp",
+        "subsvfg",
         "subvfg"
     ]
 }
