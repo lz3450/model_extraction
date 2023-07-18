@@ -1,8 +1,9 @@
 from __future__ import annotations
 from sys import setrecursionlimit
-from typing import Set, Dict, List, Union, Optional, Iterator
+from typing import Set, Dict, List, Tuple, Union, Optional, Iterator
 import re
 from copy import deepcopy
+from functools import reduce
 import logging
 
 
@@ -41,10 +42,10 @@ class Edge:
 
 
 class Node:
-    def __init__(self, name: str, info: Optional[str] = None):
+    def __init__(self, name: str, info: str):
         self._name = name
         self._label = info if info else ''
-        self._info = re.split(r',\\n\s*', info) if info else None
+        self._info = re.split(r',\\n\s*', info)
         self._edges: Set[Edge] = set()
         self._type, self._id = self._info[0].split(" ID: ")
         try:
@@ -73,11 +74,11 @@ class Node:
         self._label = label
 
     @property
-    def ir(self) -> str:
+    def ir(self) -> Optional[str]:
         return self._ir
 
     @property
-    def function(self) -> str:
+    def function(self) -> Optional[str]:
         if self._ir:
             pattern = re.compile(r'Function\[(\S+)\]')
             match = pattern.search(self._ir)
@@ -86,7 +87,7 @@ class Node:
         return None
 
     @property
-    def basic_block(self) -> str:
+    def basic_block(self) -> Optional[str]:
         if self._ir:
             pattern = re.compile(r'BasicBlock\[(\S+)\]')
             match = pattern.search(self._ir)
@@ -118,22 +119,18 @@ class Node:
         """
         return any(edge.source == self.name for edge in self._edges)
 
-    def has_edge(self, source:str, target:str) -> bool:
+    def has_edge(self, source: str, target: str) -> bool:
         for edge in self._edges:
             if edge.source == source and edge.target == target:
                 return True
         else:
             return False
 
-
     def add_edge(self, edge: Edge) -> None:
         self._edges.add(edge)
 
     def remove_edge(self, edge: Edge) -> None:
         self._edges.remove(edge)
-
-    def __getitem__(self, index) -> Edge:
-        return self._edges[index]
 
     def __iter__(self):
         yield from self._edges
@@ -143,7 +140,7 @@ class Node:
 
 
 class Graph:
-    def __init__(self, nodes: Dict[str, Node] = None, edges: Set[Edge] = None) -> None:
+    def __init__(self, nodes: Optional[Dict[str, Node]] = None, edges: Optional[Set[Edge]] = None) -> None:
         self._nodes = nodes if nodes is not None else dict()
         self._edges = edges if edges is not None else set()
 
@@ -182,23 +179,23 @@ class Graph:
             nodes[edge.target].add_edge(edge)
 
         return cls(nodes, edges)
-    
+
     @property
     def node_number(self):
         return len(self._nodes)
-    
+
     @property
     def edge_number(self):
         return len(self._edges)
 
-    def add_node(self, node_name: str, info: Optional[str] = None) -> None:
+    def add_node(self, node_name: str, info: str) -> None:
         """
         Adds a new node to the graph.
 
         :param node_name: The name of the node.
         :param label: The label of the node.
         """
-        if node_name in self.nodes:
+        if node_name in self._nodes:
             print(f"A node with the name {node_name} already exists.")
         else:
             self._nodes[node_name] = Node(node_name, info)
@@ -253,52 +250,53 @@ class Graph:
     def get_subgraph(self, node_name_or_id: Union[str, int]) -> Graph:
         """
         Get all nodes connected to the given node.
-
-        :return: A Graph object containing nodes connected to the given node.
         """
         if isinstance(node_name_or_id, int):
             node_name = self.get_name_from_id(node_name_or_id)
+        else:
+            node_name = node_name_or_id
 
-        visited: Set[Node] = set()
+        visited: Set[str] = set()
 
-        # def _dfs(node_name: str, direction: str = 'f') -> None:
-        #     if direction not in ('f', 'b'):
-        #         raise ValueError(f'Unknown direction "{direction}"')
+        def _dfs(node_name: str, direction: str = 'f') -> None:
+            if direction not in ('f', 'b'):
+                raise ValueError(f'Unknown direction "{direction}"')
 
+            # Mark the current node as visited
+            current_node_name = node_name
+            visited.add(current_node_name)
+
+            current_node = self._nodes[current_node_name]
+            # Recur for all connected nodes
+            for edge in current_node:
+                if (
+                        direction == 'f' and
+                        edge.source == node_name and
+                        edge.target not in visited
+                ):
+                    _dfs(edge.target, 'f')
+                if (
+                        direction == 'b' and
+                        edge.target == node_name and
+                        edge.source not in visited
+                ):
+                    _dfs(edge.source, 'b')
+        _dfs(node_name, 'f')
+        _dfs(node_name, 'b')
+        # def _dfs(node_name: str) -> None:
         #     # Mark the current node as visited
         #     current_node = self._nodes[node_name]
         #     visited.add(current_node)
 
         #     # Recur for all connected nodes
         #     for edge in current_node:
-        #         if (
-        #                 direction == 'f' and
-        #                 edge.source == node_name and
-        #                 self._nodes[edge.target] not in visited
-        #         ):
-        #             _dfs(edge.target, direction)
-        #         if (
-        #                 direction == 'b' and
-        #                 edge.source == node_name and
-        #                 self._nodes[edge.source] not in visited
-        #         ):
-        #             _dfs(edge.source, direction)
-        # _dfs(node_name, 'f')
-        # _dfs(node_name, 'r')
-        def _dfs(node_name: str) -> None:
-            # Mark the current node as visited
-            current_node = self._nodes[node_name]
-            visited.add(current_node)
+        #         if edge.source == node_name and self._nodes[edge.target] not in visited:
+        #             _dfs(edge.target)
+        #         if edge.target == node_name and self._nodes[edge.source] not in visited:
+        #             _dfs(edge.source)
 
-            # Recur for all connected nodes
-            for edge in current_node:
-                # if edge.source == node_name and self._nodes[edge.target] not in visited:
-                #     _dfs(edge.target)
-                if edge.target == node_name and self._nodes[edge.source] not in visited:
-                    _dfs(edge.source)
-
-        _dfs(node_name)
-        visited_nodes = {node.name: node for node in visited}
+        # _dfs(node_name)
+        visited_nodes = {name: self._nodes[name] for name in visited}
         visited_edges = {edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
 
         return Graph(visited_nodes, visited_edges)
@@ -359,24 +357,15 @@ class Model:
     config_logger(logger)
 
     def __init__(self, vfg: Graph, node_name_or_id: Union[str, int]) -> None:
-        self._vfg = vfg.duplicate()
-        self._vfg_updated = True
+        self._vfg = vfg
         self._node_id = node_name_or_id if isinstance(node_name_or_id, int) else vfg.get_id_from_name(node_name_or_id)
-        self.logger.debug("Start transform Sub VFG to Model")
-        i = 0
-        while self._vfg_updated:
-            i += 1
-            self.logger.debug("Transform iteration: %d", i)
-            subvfg = self._vfg.get_subgraph(node_name_or_id)
-            model = self._transform(subvfg.duplicate())
-            self.logger.debug("# Node in Model: %d", len(model))
-        self._subvfg = subvfg
-        # self._model = model
-        self._model = self._opt(model)
-
-    def _transform(self, subvfg: Graph) -> Graph:
-        self._vfg_updated = False
-        for node in subvfg:
+        self._model, self._subvfg = self._vfg_to_model(node_name_or_id)
+        self._model = self._opt()
+    def _vfg_to_model(self, node_name_or_id: Union[str, int]) -> Tuple[Graph, Graph]:
+        def _transform_node(node: Node):
+            vfg_updated = False
+            if node.ir is None:
+                return
             match node.type:
                 case 'AddrVFGNode':
                     pattern = re.compile(r'(\S+) = .+')
@@ -421,11 +410,17 @@ class Model:
                     match = pattern.match(node.ir)
                     if match:
                         node.label = match.group(1)
+                        if node.function is None or node.basic_block is None:
+                            self.logger.warning('ActualParmVFGNode (%d) does not contains necessary information', node.id)
+                            return
                         callsite_nodes = self._vfg.search_nodes('ActualRetVFGNode', node.function, node.basic_block)
                         for callsite_node in callsite_nodes:
+                            if callsite_node.ir is None:
+                                self.logger.warning('ActualRetVFGNode (%d) does not contains necessary information', callsite_node.id)
+                                return
                             if match.group(1) in callsite_node.ir and not node.has_edge(node.name, callsite_node.name):
                                 self._vfg.add_edge(Edge(node.name, callsite_node.name))
-                                self._vfg_updated = True
+                                vfg_updated = True
                     else:
                         node.label = node.ir
                 case 'ActualRetVFGNode':
@@ -442,12 +437,15 @@ class Model:
                             if param_match:
                                 param_labels.append(param_match.group(1))
                         node.label = f"{retval} = {func_name}({', '.join(param_labels)})"
+                        if node.function is None or node.basic_block is None:
+                            self.logger.warning('ActualRetVFGNode (%d) does not contains necessary information', node.id)
+                            return
                         param_nodes = self._vfg.search_nodes('ActualParmVFGNode', node.function, node.basic_block)
                         for param_node in param_nodes:
                             for param_label in param_labels:
                                 if param_label in param_node.ir and not node.has_edge(param_node.name, node.name):
                                     self._vfg.add_edge(Edge(param_node.name, node.name))
-                                    self._vfg_updated = True
+                                    vfg_updated = True
                     else:
                         node.label = node.ir
                 case 'BinaryOPVFGNode':
@@ -464,15 +462,31 @@ class Model:
                         element = match.group(1)
                         ptrvar = match.group(4)
                         node.label = f'{ptrvar}.{element}'
-        return subvfg
+            return vfg_updated
 
-    def _opt(self, model: Graph):
-        edge_to_del = [edge for node in model for edge in node if not model.has_node_name(edge.target) or not model.has_node_name(edge.source)]
+        self.logger.debug("Start to extract model")
+        i = 0
+        while True:
+            vfg_updated = False
+            i += 1
+            self.logger.debug("Transform iteration: %d", i)
+            subvfg = self._vfg.get_subgraph(node_name_or_id)
+            model = subvfg.duplicate()
+            self.logger.debug("SUB VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
+            for i, node in enumerate(model):
+                self.logger.debug("Transforming %d/%d", i, subvfg.node_number)
+                vfg_updated = _transform_node(node)
+            if not vfg_updated:
+                break
+        return model, subvfg
+
+    def _opt(self):
+        edge_to_del = [edge for node in self._model for edge in node if not self._model.has_node_name(edge.target) or not self._model.has_node_name(edge.source)]
         for edge in edge_to_del:
-            model.remove_edge(edge)
+            self._model.remove_edge(edge)
 
         node_to_del: List[Node] = []
-        for node in model:
+        for node in self._model:
             match node.type:
                 case 'FormalRetVFGNode':
                     node_to_del.append(node)
@@ -487,12 +501,15 @@ class Model:
                             assert False
                     for lower_node_name in lower_node_names:
                         for upper_node_name in upper_node_names:
-                            model.add_edge(Edge(upper_node_name, lower_node_name))
+                            self._model.add_edge(Edge(upper_node_name, lower_node_name))
         for node in node_to_del:
             edge_to_del = [edge for edge in node]
-            model.remove_node(node.name)
+            self._model.remove_node(node.name)
         for edge in edge_to_del:
-            model.remove_edge(edge)
+            try:
+                self._model.remove_edge(edge)
+            except KeyError:
+                pass
             # case 'IntraPHIVFGNode':
             #     if node[0].source == node.name:
             #         outgoing_node_name, incoming_node_name = node[0].target, node[1].source if node[0].source == node.name else node[1].target, node[0].source
@@ -513,8 +530,7 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
     config_logger(logger)
 
-    setrecursionlimit(5000)
-
+    setrecursionlimit(10000)
 
     # vfg = Graph.from_dot_file('examples/example0/vfg.dot')
     # svfg = Graph.from_dot_file('examples/example0/full_svfg.dot')
@@ -528,13 +544,14 @@ if __name__ == "__main__":
     # model.write_subvfg("examples/example1/subvfg.dot")
     # model.write("examples/example1/model.dot")
 
-    vfg = Graph.from_dot_file('tmp/vfg.dot')
+    vfg = Graph.from_dot_file('examples/tf2/vfg.dot')
     logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
-    # svfg = Graph.from_dot_file('tmp/full_svfg.dot')
-    node_id = 77793
-    # model = Model(vfg, 77788)
-    # model = Model(vfg, 1503)
+    svfg = Graph.from_dot_file('examples/tf2/full_svfg.dot')
+    logger.info("SVFG scale: (node: %d, edge: %d)", svfg.node_number, svfg.edge_number)
+    # node_id = 77788
+    # node_id = 77793
+    node_id = 1503
     logger.info("Starting node: %s", vfg[vfg.get_name_from_id(node_id)])
-    model = Model(vfg, node_id)
-    model.write_subvfg("tmp/subvfg.dot")
-    model.write("tmp/model.dot")
+    model = Model(svfg, node_id)
+    model.write_subvfg("examples/tf2/subvfg.dot")
+    model.write("examples/tf2/model.dot")
