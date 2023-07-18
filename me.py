@@ -360,8 +360,10 @@ class Model:
         self._vfg = vfg
         self._node_id = node_name_or_id if isinstance(node_name_or_id, int) else vfg.get_id_from_name(node_name_or_id)
         self._model, self._subvfg = self._vfg_to_model(node_name_or_id)
-        self._model = self._opt()
+        self._opt()
+
     def _vfg_to_model(self, node_name_or_id: Union[str, int]) -> Tuple[Graph, Graph]:
+
         def _transform_node(node: Node):
             vfg_updated = False
             if node.ir is None:
@@ -421,6 +423,7 @@ class Model:
                             if match.group(1) in callsite_node.ir and not node.has_edge(node.name, callsite_node.name):
                                 self._vfg.add_edge(Edge(node.name, callsite_node.name))
                                 vfg_updated = True
+                                self.logger.debug("VFG updated when processing ActualParmVFGNode (%d)", node.id)
                     else:
                         node.label = node.ir
                 case 'ActualRetVFGNode':
@@ -446,6 +449,7 @@ class Model:
                                 if param_label in param_node.ir and not node.has_edge(param_node.name, node.name):
                                     self._vfg.add_edge(Edge(param_node.name, node.name))
                                     vfg_updated = True
+                                    self.logger.debug("VFG updated when processing ActualRetVFGNode (%d)", node.id)
                     else:
                         node.label = node.ir
                 case 'BinaryOPVFGNode':
@@ -465,18 +469,18 @@ class Model:
             return vfg_updated
 
         self.logger.debug("Start to extract model")
-        i = 0
+        it = 0
         while True:
-            vfg_updated = False
-            i += 1
-            self.logger.debug("Transform iteration: %d", i)
+            it += 1
+            self.logger.info("Transform iteration: %d", it)
             subvfg = self._vfg.get_subgraph(node_name_or_id)
             model = subvfg.duplicate()
             self.logger.debug("SUB VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
             for i, node in enumerate(model):
                 self.logger.debug("Transforming %d/%d", i, subvfg.node_number)
-                vfg_updated = _transform_node(node)
-            if not vfg_updated:
+                if _transform_node(node):
+                    break
+            else:
                 break
         return model, subvfg
 
@@ -517,8 +521,6 @@ class Model:
             #         model.remove_edge(node[0])
             #         model.remove_edge(node[1])
 
-        return model
-
     def write_subvfg(self, output_file: str) -> None:
         self._subvfg.write(output_file, label="Sub VFG")
 
@@ -552,6 +554,6 @@ if __name__ == "__main__":
     # node_id = 77793
     node_id = 1503
     logger.info("Starting node: %s", vfg[vfg.get_name_from_id(node_id)])
-    model = Model(svfg, node_id)
+    model = Model(vfg, node_id)
     model.write_subvfg("examples/tf2/subvfg.dot")
     model.write("examples/tf2/model.dot")
