@@ -140,6 +140,9 @@ class Node:
 
 
 class Graph:
+    logger = logging.getLogger(__qualname__)
+    config_logger(logger)
+
     def __init__(self, nodes: Optional[Dict[str, Node]] = None, edges: Optional[Set[Edge]] = None) -> None:
         self._nodes = nodes if nodes is not None else dict()
         self._edges = edges if edges is not None else set()
@@ -247,16 +250,11 @@ class Graph:
         else:
             raise ValueError(f"No node found with ID {id}")
 
-    def get_subgraph(self, node_name_or_id: Union[str, int]) -> Graph:
+    def get_subgraph(self, node_ids: list[int]) -> Graph:
         """
         Get all nodes connected to the given node.
         """
-        if isinstance(node_name_or_id, int):
-            node_name = self.get_name_from_id(node_name_or_id)
-        else:
-            node_name = node_name_or_id
-
-        visited: Set[str] = set()
+        visited: set[str] = set()
 
         def _dfs(node_name: str, direction: str = 'f') -> None:
             if direction not in ('f', 'b'):
@@ -281,8 +279,13 @@ class Graph:
                         edge.source not in visited
                 ):
                     _dfs(edge.source, 'b')
-        _dfs(node_name, 'f')
-        _dfs(node_name, 'b')
+
+        for node_id in node_ids:
+            self.logger.debug("Get subgraph from %d", node_id)
+            node_name = self.get_name_from_id(node_id)
+            _dfs(node_name, 'f')
+            _dfs(node_name, 'b')
+
         # def _dfs(node_name: str) -> None:
         #     # Mark the current node as visited
         #     current_node = self._nodes[node_name]
@@ -301,7 +304,7 @@ class Graph:
 
         return Graph(visited_nodes, visited_edges)
 
-    def search_nodes(self, type: str, function: str, basic_block: str) -> Set[Node]:
+    def search_nodes(self, type: str, function: str, basic_block: str) -> set[Node]:
         matching_nodes = set()
         for node in self._nodes.values():
             if (
@@ -356,13 +359,12 @@ class Model:
     logger = logging.getLogger(__qualname__)
     config_logger(logger)
 
-    def __init__(self, vfg: Graph, node_name_or_id: Union[str, int]) -> None:
+    def __init__(self, vfg: Graph, node_ids: list[int]) -> None:
         self._vfg = vfg
-        self._node_id = node_name_or_id if isinstance(node_name_or_id, int) else vfg.get_id_from_name(node_name_or_id)
-        self._model, self._subvfg = self._vfg_to_model(node_name_or_id)
+        self._model, self._subvfg = self._vfg_to_model(node_ids)
         self._opt()
 
-    def _vfg_to_model(self, node_name_or_id: Union[str, int]) -> Tuple[Graph, Graph]:
+    def _vfg_to_model(self, node_ids: list[int]) -> Tuple[Graph, Graph]:
 
         def _transform_node(node: Node):
             vfg_updated = False
@@ -473,11 +475,11 @@ class Model:
         while True:
             it += 1
             self.logger.info("Transform iteration: %d", it)
-            subvfg = self._vfg.get_subgraph(node_name_or_id)
+            subvfg = self._vfg.get_subgraph(node_ids)
             model = subvfg.duplicate()
             self.logger.debug("SUB VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
             for i, node in enumerate(model):
-                self.logger.debug("Transforming %d/%d", i, subvfg.node_number)
+                self.logger.debug("Transforming %d/%d", i + 1, subvfg.node_number)
                 if _transform_node(node):
                     break
             else:
@@ -550,10 +552,8 @@ if __name__ == "__main__":
     logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
     svfg = Graph.from_dot_file('examples/tf2/full_svfg.dot')
     logger.info("SVFG scale: (node: %d, edge: %d)", svfg.node_number, svfg.edge_number)
-    # node_id = 77788
-    # node_id = 77793
-    node_id = 1503
-    logger.info("Starting node: %s", vfg[vfg.get_name_from_id(node_id)])
-    model = Model(vfg, node_id)
+    node_ids = [1503, 77788, 77793]
+    logger.info("Starting nodes: %s", node_ids)
+    model = Model(vfg, node_ids)
     model.write_subvfg("examples/tf2/subvfg.dot")
     model.write("examples/tf2/model.dot")
