@@ -37,6 +37,9 @@ class Edge:
     def target(self) -> str:
         return self._target
 
+    def reverse(self):
+        self._source, self._target = self._target, self._source
+
     def __repr__(self) -> str:
         return f'Edge({self._source} → {self._target})'
 
