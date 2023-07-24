@@ -613,8 +613,8 @@ if __name__ == "__main__":
 
     vfg = Graph.from_dot_file('examples/tf2/vfg.dot')
     logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
-    svfg = Graph.from_dot_file('examples/tf2/full_svfg.dot')
-    logger.info("SVFG scale: (node: %d, edge: %d)", svfg.node_number, svfg.edge_number)
+    # svfg = Graph.from_dot_file('examples/tf2/full_svfg.dot')
+    # logger.info("SVFG scale: (node: %d, edge: %d)", svfg.node_number, svfg.edge_number)
     node_ids = [1503, 77788, 77793]
     logger.info("Starting nodes: %s", node_ids)
     model = Model(vfg, node_ids)
