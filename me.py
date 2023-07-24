@@ -525,6 +525,9 @@ class Model:
                         element = match.group(1)
                         ptrvar = match.group(4)
                         node.label = f'{ptrvar}.{element}'
+                case 'IntraPHIVFGNode':
+                    assert node.function is not None
+                    node.label = node.function
             return vfg_updated
 
         self.logger.debug("Start to extract model")
