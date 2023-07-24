@@ -620,3 +620,13 @@ if __name__ == "__main__":
     model = Model(vfg, node_ids)
     model.write_subvfg("examples/tf2/subvfg.dot")
     model.write("examples/tf2/model.dot")
+
+    vfg = Graph.from_dot_file('examples/scale_publisher/vfg.dot')
+    logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
+    # svfg = Graph.from_dot_file('examples/tf2/full_svfg.dot')
+    # logger.info("SVFG scale: (node: %d, edge: %d)", svfg.node_number, svfg.edge_number)
+    node_ids = [755, 25311, 25300]
+    logger.info("Starting nodes: %s", node_ids)
+    model = Model(vfg, node_ids)
+    model.write_subvfg("examples/scale_publisher/subvfg.dot")
+    model.write("examples/scale_publisher/model.dot")
