@@ -445,7 +445,7 @@ class Model:
                     else:
                         node.label = node.ir
                 case 'CopyVFGNode':
-                    pattern = re.compile(r'(%\S+) = (sitofp) .+ (%\S+) to .+,')
+                    pattern = re.compile(r'(%\S+) = (sitofp|fpext|bitcast|fptrunc) .+ (%\S+) to .+,')
                     match = pattern.match(node.ir)
                     if match:
                         node.label = f'{match.group(3)} → {match.group(1)}'
