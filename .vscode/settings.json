@@ -1,8 +1,11 @@
 {
     "cSpell.words": [
         "aefd",
+        "bitcast",
         "callsite",
         "fmul",
+        "fpext",
+        "fptrunc",
         "INSVFG",
         "OPVFG",
         "OUTSVFG",
