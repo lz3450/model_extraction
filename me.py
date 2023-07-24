@@ -292,7 +292,8 @@ class Graph:
         """
         Get all nodes connected to the given node.
         """
-        visited: set[str] = set()
+        forward_visited: set[str] = set()
+        backward_visited: set[str] = set()
 
         def _dfs(node_name: str, direction: str = 'f') -> None:
             if direction not in ('f', 'b'):
@@ -300,7 +301,12 @@ class Graph:
 
             # Mark the current node as visited
             current_node_name = node_name
-            visited.add(current_node_name)
+            if direction == 'f':
+                forward_visited.add(current_node_name)
+            elif direction == 'b':
+                backward_visited.add(current_node_name)
+            else:
+                raise ValueError('Unknown direction')
 
             current_node = self._nodes[current_node_name]
             # Recur for all connected nodes
@@ -308,13 +314,13 @@ class Graph:
                 if (
                         direction == 'f' and
                         edge.source == node_name and
-                        edge.target not in visited
+                        edge.target not in forward_visited
                 ):
                     _dfs(edge.target, 'f')
                 if (
                         direction == 'b' and
                         edge.target == node_name and
-                        edge.source not in visited
+                        edge.source not in backward_visited
                 ):
                     _dfs(edge.source, 'b')
 
@@ -326,18 +332,20 @@ class Graph:
 
         # def _dfs(node_name: str) -> None:
         #     # Mark the current node as visited
-        #     current_node = self._nodes[node_name]
-        #     visited.add(current_node)
+        #     current_node_name = node_name
+        #     visited.add(current_node_name)
 
+        #     current_node = self._nodes[current_node_name]
         #     # Recur for all connected nodes
         #     for edge in current_node:
         #         if edge.source == node_name and self._nodes[edge.target] not in visited:
         #             _dfs(edge.target)
         #         if edge.target == node_name and self._nodes[edge.source] not in visited:
         #             _dfs(edge.source)
-
-        # _dfs(node_name)
-        visited_nodes = {name: self._nodes[name] for name in visited}
+        # for node_id in node_ids:
+        #     node_name = self.get_name_from_id(node_id)
+        #     _dfs(node_name)
+        visited_nodes = {name: self._nodes[name] for name in forward_visited | backward_visited}
         visited_edges = {edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
 
         return Graph(visited_nodes, visited_edges)
