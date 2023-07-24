@@ -330,6 +330,8 @@ class Graph:
             _dfs(node_name, 'f')
             _dfs(node_name, 'b')
 
+        # visited: set[str] = set()
+
         # def _dfs(node_name: str) -> None:
         #     # Mark the current node as visited
         #     current_node_name = node_name
@@ -345,7 +347,9 @@ class Graph:
         # for node_id in node_ids:
         #     node_name = self.get_name_from_id(node_id)
         #     _dfs(node_name)
+
         visited_nodes = {name: self._nodes[name] for name in forward_visited | backward_visited}
+        # visited_nodes = {name: self._nodes[name] for name in visited}
         visited_edges = {edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
 
         return Graph(visited_nodes, visited_edges)
