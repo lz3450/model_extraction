@@ -1,6 +1,6 @@
 from __future__ import annotations
 from sys import setrecursionlimit
-from typing import Set, Dict, List, Tuple, Union, Optional, Iterator
+from typing import Optional, Iterator
 import re
 from copy import deepcopy
 from functools import reduce
@@ -46,7 +46,7 @@ class Node:
         self._name = name
         self._label = info if info else ''
         self._info = re.split(r',\\n\s*', info)
-        self._edges: Set[Edge] = set()
+        self._edges: set[Edge] = set()
         self._type, self._id = self._info[0].split(" ID: ")
         try:
             self._ir = self._info[2] if self._info[2] != '(none)' else None
@@ -119,6 +119,30 @@ class Node:
         """
         return any(edge.source == self.name for edge in self._edges)
 
+    @property
+    def upper_node_names(self) -> Iterator[str]:
+        for edge in self._edges:
+            if edge.target == self.name:
+                yield edge.source
+
+    @property
+    def lower_node_names(self) -> Iterator[str]:
+        for edge in self._edges:
+            if edge.source == self.name:
+                yield edge.target
+
+    @property
+    def upper_node_number(self) -> int:
+        return sum(1 for _ in self.upper_node_names)
+
+    @property
+    def lower_node_number(self) -> int:
+        return sum(1 for _ in self.lower_node_names)
+    
+    @property
+    def is_unreachable(self) -> bool:
+        return len(self._edges)  == 0
+
     def has_edge(self, source: str, target: str) -> bool:
         for edge in self._edges:
             if edge.source == source and edge.target == target:
@@ -143,15 +167,15 @@ class Graph:
     logger = logging.getLogger(__qualname__)
     config_logger(logger)
 
-    def __init__(self, nodes: Optional[Dict[str, Node]] = None, edges: Optional[Set[Edge]] = None) -> None:
+    def __init__(self, nodes: Optional[dict[str, Node]] = None, edges: Optional[set[Edge]] = None) -> None:
         self._nodes = nodes if nodes is not None else dict()
         self._edges = edges if edges is not None else set()
 
     @classmethod
     def from_dot_file(cls, dot_file: str) -> Graph:
 
-        nodes: Dict[str, Node] = dict()
-        edges: Set[Edge] = set()
+        nodes: dict[str, Node] = dict()
+        edges: set[Edge] = set()
 
         # Regular expressions to match nodes and edges
         node_re = re.compile(r'(Node0x[0-9a-f]+) \[.*label="\{(.+)\}"\];')
@@ -203,9 +227,6 @@ class Graph:
         else:
             self._nodes[node_name] = Node(node_name, info)
 
-    def remove_node(self, node_name: str) -> None:
-        del self._nodes[node_name]
-
     def add_edge(self, edge: Edge) -> None:
         """
         Adds a new edge to the graph.
@@ -220,15 +241,29 @@ class Graph:
             self._nodes[edge.source].add_edge(edge)
             self._nodes[edge.target].add_edge(edge)
 
+    def has_node_name(self, node_name) -> bool:
+        return node_name in self._nodes
+
     def remove_edge(self, edge: Edge) -> None:
+        """
+        Remove an edge from the graph and the corresponding nodes.
+        """
         self._edges.remove(edge)
         if self.has_node_name(edge.source):
             self._nodes[edge.source].remove_edge(edge)
         if self.has_node_name(edge.target):
             self._nodes[edge.target].remove_edge(edge)
 
-    def has_node_name(self, node_name) -> bool:
-        return node_name in self._nodes
+    def disconnect_node(self, node_name: str) -> None:
+        """
+        Remove all edges of the give node.
+        """
+        for edge in [_ for _ in self._nodes[node_name]]:
+            self.remove_edge(edge)
+
+    def remove_node(self, node_name: str) -> None:
+        self.disconnect_node(node_name)
+        del self._nodes[node_name]
 
     def get_name_from_id(self, id: int) -> str:
         """
@@ -337,7 +372,8 @@ class Graph:
 
             # Write nodes
             for node in self._nodes.values():
-                file.write(f'\t{node.name} [shape=record,penwidth=2,label="{{{node.label}}}"];\n')
+                # file.write(f'\t{node.name} [shape=record,penwidth=2,label="{{{node.label}}}"];\n')
+                file.write(f'\t{node.name} [shape=record,penwidth=2,label="{{{node.type} ID: {node.id}\\n{node.label}}}"];\n')
 
             # Write edges
             for edge in self._edges:
@@ -352,7 +388,7 @@ class Graph:
         return self._nodes[node_name]
 
     def __iter__(self) -> Iterator[Node]:
-        yield from self._nodes.values()
+        yield from sorted(self._nodes.values(), key=lambda node: node.id)
 
 
 class Model:
@@ -362,10 +398,15 @@ class Model:
     def __init__(self, vfg: Graph, node_ids: list[int]) -> None:
         self._vfg = vfg
         self._model, self._subvfg = self._vfg_to_model(node_ids)
-        self._opt()
+        self._opt0()
+        self._opt1()
+        self._opt2()
+        self._remove_unreachable_nodes()
 
-    def _vfg_to_model(self, node_ids: list[int]) -> Tuple[Graph, Graph]:
-
+    def _vfg_to_model(self, node_ids: list[int]) -> tuple[Graph, Graph]:
+        """
+        VFG node label to model node label
+        """
         def _transform_node(node: Node):
             vfg_updated = False
             if node.ir is None:
@@ -462,6 +503,7 @@ class Model:
                     else:
                         node.label = node.ir
                 case 'GepVFGNode':
+                    assert node.upper_node_number == 1
                     pattern = re.compile(r'(%\S+) = getelementptr inbounds (%\S+), (%\S+) (%\S+), (\S+) (\d+), (\S+) (\d+)')
                     match = pattern.match(node.ir)
                     if match:
@@ -486,42 +528,45 @@ class Model:
                 break
         return model, subvfg
 
-    def _opt(self):
+    def _opt0(self):
+        """
+        Pass 0: Remove single-connected edges.
+        """
         edge_to_del = [edge for node in self._model for edge in node if not self._model.has_node_name(edge.target) or not self._model.has_node_name(edge.source)]
         for edge in edge_to_del:
             self._model.remove_edge(edge)
 
-        node_to_del: List[Node] = []
+    def _opt1(self):
+        """
+        Pass 1: Remove 'FormalRetVFGNode' nodes.
+        """
         for node in self._model:
-            match node.type:
-                case 'FormalRetVFGNode':
-                    node_to_del.append(node)
-                    lower_node_names: List[str] = []
-                    upper_node_names: List[str] = []
-                    for edge in node:
-                        if edge.source == node.name:
-                            lower_node_names.append(edge.target)
-                        elif edge.target == node.name:
-                            upper_node_names.append(edge.source)
-                        else:
-                            assert False
-                    for lower_node_name in lower_node_names:
-                        for upper_node_name in upper_node_names:
-                            self._model.add_edge(Edge(upper_node_name, lower_node_name))
-        for node in node_to_del:
-            edge_to_del = [edge for edge in node]
+            if node.type == 'FormalRetVFGNode':
+                for lower_node_name in node.lower_node_names:
+                    for upper_node_name in node.upper_node_names:
+                        self._model.add_edge(Edge(upper_node_name, lower_node_name))
+                self._model.disconnect_node(node.name)
+
+    def _opt2(self):
+        """
+        Pass 2: Remove unnecessary 'GepVFGNode' nodes.
+        """
+        for node in self._model:
+            if node.type == 'GepVFGNode':
+                try:
+                    upper_node = self._model[next(node.upper_node_names)]
+                except StopIteration:
+                    pass
+                else:
+                    if upper_node.type == 'GepVFGNode':
+                        node.label = f'{upper_node.label}.{node.label.split(".")[1]}'
+                        upper_upper_node_name = next(upper_node.upper_node_names)
+                        self._model.add_edge(Edge(upper_upper_node_name, node.name))
+                        self._model.disconnect_node(upper_node.name)
+
+    def _remove_unreachable_nodes(self):
+        for node in [node for node in self._model if node.is_unreachable]:
             self._model.remove_node(node.name)
-        for edge in edge_to_del:
-            try:
-                self._model.remove_edge(edge)
-            except KeyError:
-                pass
-            # case 'IntraPHIVFGNode':
-            #     if node[0].source == node.name:
-            #         outgoing_node_name, incoming_node_name = node[0].target, node[1].source if node[0].source == node.name else node[1].target, node[0].source
-            #         model.add_edge(Edge(incoming_node_name, outgoing_node_name))
-            #         model.remove_edge(node[0])
-            #         model.remove_edge(node[1])
 
     def write_subvfg(self, output_file: str) -> None:
         self._subvfg.write(output_file, label="Sub VFG")
