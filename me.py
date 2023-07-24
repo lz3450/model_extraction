@@ -141,10 +141,10 @@ class Node:
     @property
     def lower_node_number(self) -> int:
         return sum(1 for _ in self.lower_node_names)
-    
+
     @property
     def is_unreachable(self) -> bool:
-        return len(self._edges)  == 0
+        return len(self._edges) == 0
 
     def has_edge(self, source: str, target: str) -> bool:
         for edge in self._edges:
