@@ -10,8 +10,11 @@ config_logger(logger)
 
 
 class VFGNode:
-    def __init__(self, name: str, label: str = ''):
+    def __init__(self, name: str, label: str = '', shape: str = 'record', color: str = 'black', penwidth: int = 2):
         self._name = name
+        self._shape = shape
+        self._color = color
+        self._penwidth = penwidth
         self._info = re.split(r',\\n\s*', label)
         self._edges: set[VFGEdge] = set()
         self._type, self._id = self._info[0].split(" ID: ")
@@ -46,6 +49,18 @@ class VFGNode:
     @property
     def id(self) -> int:
         return int(self._id)
+
+    @property
+    def shape(self) -> str:
+        return self._shape
+
+    @property
+    def color(self) -> str:
+        return self._color
+    
+    @property
+    def penwidth(self) -> int:
+        return self._penwidth
 
     @property
     def label(self) -> str:

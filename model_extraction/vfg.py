@@ -189,8 +189,7 @@ class VFG:
         #     node_name = self.get_name_from_id(node_id)
         #     _dfs(node_name)
 
-        visited_nodes = {name: self._nodes[name]
-                         for name in forward_visited | backward_visited}
+        visited_nodes = {name: self._nodes[name] for name in forward_visited | backward_visited}
         # visited_nodes = {name: self._nodes[name] for name in visited}
         visited_edges = {
             edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
@@ -205,19 +204,18 @@ class VFG:
         """
         # Open the output file for writing
         with open(output_file, mode='w', encoding='utf-8') as file:
-            file.write("digraph G {\n")
+            file.write('digraph "VFG" {\n')
             file.write('\trankdir="LR";\n')
             file.write(f'\tlabel="{label}";\n\n')
 
             # Write nodes
             for node in self._nodes.values():
-                # file.write(f'\t{node.name} [shape=record,penwidth=2,label="{{{node.label}}}"];\n')
-                file.write(
-                    f'\t{node.name} [shape=record,penwidth=2,label="{{{node.type} ID: {node.id}\\n{node.label}}}"];\n')
+                # file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth=2,label="{{{node.label}}}"];\n')
+                file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth={node.penwidth},label="{{{node.type} ID: {node.id}\\n{node.label}}}"];\n')
 
             # Write edges
             for edge in self._edges:
-                file.write(f'\t{edge.source} -> {edge.target};\n')
+                file.write(f'\t{edge.source} -> {edge.target}[style={edge.style},color={edge.color}];\n')
 
             file.write("}\n")
 
@@ -237,8 +235,9 @@ def read_vfg(dot_file: str) -> VFG:
     edges: set[VFGEdge] = set()
 
     # Regular expressions to match nodes and edges
-    node_re = re.compile(r'(Node0x[0-9a-f]+) \[.*label="\{(.+)\}"\];')
-    edge_re = re.compile(r'(Node0x[0-9a-f]+) -> (Node0x[0-9a-f]+)\[.*\];')
+    header_re = re.compile(r'digraph.+\{|rankdir=.+|label=.+|\}')
+    node_re = re.compile(r'(Node0x[0-9a-f]+) \[shape=(\w+),color=(\w+)(?:,penwidth=(\d+))?,label="\{(.+)\}"\];')
+    edge_re = re.compile(r'(Node0x[0-9a-f]+) -> (Node0x[0-9a-f]+)\[style=(\w+)(?:,color=(\w+))?\];')
 
     # Read the file and split into lines
     with open(dot_file, mode='r', encoding="utf-8") as file:
@@ -248,17 +247,30 @@ def read_vfg(dot_file: str) -> VFG:
             # Check if the line contains a node description
             node_match = node_re.match(line)
             if node_match:
-                node_name = node_match.group(1)
-                node_label = node_match.group(2)
-                nodes[node_name] = VFGNode(node_name, node_label)
+                node_name = node_match[1]
+                node_shape = node_match[2]
+                node_color = node_match[3]
+                node_penwidth = 2 * int(node_match[4]) if node_match[4] else 2
+                node_label = node_match[5]
+                nodes[node_name] = VFGNode(node_name, node_label, node_shape, node_color, node_penwidth)
+                continue
 
             # Check if the line contains an edge description
             edge_match = edge_re.match(line)
             if edge_match:
-                source_node = edge_match.group(1)
-                target_node = edge_match.group(2)
-                edge = VFGEdge(source_node, target_node)
+                source_node, target_node, style, color = edge_match[1], edge_match[2], edge_match[3], edge_match[4] if edge_match[4] else "black"
+                edge = VFGEdge(source_node, target_node, style, color)
                 edges.add(edge)
+                continue
+
+            header_match = header_re.match(line)
+            if header_match:
+                continue
+
+            if not line:
+                continue
+
+            raise RuntimeWarning(f"Unrecognized line: {line}")
 
     for edge in edges:
         nodes[edge.source].add_edge(edge)

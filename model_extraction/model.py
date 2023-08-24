@@ -74,21 +74,39 @@ def _reverse_gep_store_edges(vfg: VFG):
             logger.info("VFG changed when reversing Gep-Store edges \"GepVFGNode(%d)\"", source_node.id)
 
 
+def _merge_gep(vfg: VFG, subvfg: VFG):
+    """Pass 5."""
+    for i, edge in enumerate(subvfg.edges):
+        logger.debug("Pass 5 (edge): %d/%d", i + 1, vfg.edge_number)
+        source_node = vfg[edge.source]
+        target_node = vfg[edge.target]
+        if source_node.type == 'GepVFGNode' and target_node.type == 'LoadVFGNode':
+            for lower_node_name in source_node.upper_node_names:
+                target_node.label = f'{source_node.label} → {target_node.label.split(" → ")[1]}'
+                vfg.add_edge(VFGEdge(lower_node_name, target_node.name))
+            vfg.disconnect_node(edge.source)
+            logger.info("VFG changed when reversing Gep-Load edges \"GepVFGNode(%d)\"", source_node.id)
+        elif target_node.type == 'GepVFGNode' and source_node.type == 'StoreVFGNode':
+            for lower_node_name in target_node.lower_node_names:
+                source_node.label = f'{source_node.label.split(" → ")[0]} → {target_node.label}'
+                vfg.add_edge(VFGEdge(source_node.name, lower_node_name))
+            vfg.disconnect_node(edge.target)
+            logger.info("VFG changed when reversing Gep-Store edges \"GepVFGNode(%d)\"", source_node.id)
+
+
 def _remove_unconnected_edges(vfg: VFG) -> None:
-    """Remove edges that only connected to one node."""
+    """Pass 6."""
     edge_to_del = [edge for node in vfg for edge in node if not vfg.has_node_name(edge.target) or not vfg.has_node_name(edge.source)]
     for edge in edge_to_del:
         vfg.remove_edge(edge)
 
 
-def extract_model(vfg: VFG, starting_node_ids: list[int], cwd: str) -> VFG:
+def extract_model(vfg: VFG, starting_node_ids: list[int]) -> VFG:
     # Pass 1
     _remove_consecutive_gep_nodes(vfg)
-    # vfg.write(os.path.join(cwd, "vfg_pass1.dot"))
 
     # Pass 2
     _reverse_gep_store_edges(vfg)
-    # vfg.write(os.path.join(cwd, "vfg_pass2.dot"))
 
     # Pass 3
     it = 0
@@ -109,6 +127,9 @@ def extract_model(vfg: VFG, starting_node_ids: list[int], cwd: str) -> VFG:
         logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
         if not _connect_actual_ret_nodes(vfg, subvfg):
             break
+
+    # Pass 5
+    # _merge_gep(vfg, subvfg)
 
     subvfg = vfg.get_subgraph(starting_node_ids)
     logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
