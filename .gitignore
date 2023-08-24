@@ -1,6 +1,7 @@
 collected_compile_commands
 ir
 tmp
+__pycache__
 *.ll
 *.bc
 *.dot

@@ -16,5 +16,6 @@
         "sitofp",
         "subsvfg",
         "subvfg"
-    ]
+    ],
+    "graphviz-interactive-preview.renderLockAdditionalTimeout": -1,
 }
