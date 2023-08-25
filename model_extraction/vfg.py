@@ -80,6 +80,7 @@ class VFG:
         """
         for edge in [_ for _ in self._nodes[node_name]]:
             self.remove_edge(edge)
+        self.changed = True
 
     def remove_node(self, node_name: str) -> None:
         self.disconnect_node(node_name)
@@ -200,7 +201,7 @@ class VFG:
         visited_edges = {edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
 
         subvfg = VFG(visited_nodes, visited_edges)
-        logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
+        logger.info("SubVFG scale: %d nodes, %d edges", subvfg.node_number, subvfg.edge_number)
         return subvfg
 
     def get_leaf_nodes(self) -> set[VFGNode]:
