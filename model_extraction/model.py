@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 config_logger(logger)
 
 
-def _remove_consecutive_gep_nodes(vfg: VFG):
+def _merge_consecutive_gep_nodes(vfg: VFG):
     """Remove consecutive GepVFGNode."""
     _vfg = deepcopy(vfg)
     for i, edge in enumerate(_vfg.edges):
@@ -127,20 +127,24 @@ def _merge_copy(vfg: VFG, starting_node_ids: Iterable[int]):
             logger.info("VFG changed (%d)", source_node.id)
 
 
-# def _merge_addr_load_nodes(subvfg: VFG):
-#     """"""
-#     _subvfg = deepcopy(subvfg)
-#     for i, edge in enumerate(_subvfg.edges):
-#         logger.debug("Merge_Addr_Store: %d/%d", i + 1, _subvfg.edge_number)
-#         source_node = _subvfg[edge.source]
-#         target_node = _subvfg[edge.target]
-#         if source_node.type == 'AddrVFGNode' and target_node.type == 'LoadVFGNode':
-#             logger.info("Merge_Addr_Store(%d, %d)", source_node.id, target_node.id)
-#             source_node.label = target_node.label
-#             for lower_node_name in target_node.lower_node_names:
-#                 subvfg.add_edge(VFGEdge(source_node.name, lower_node_name))
-#             subvfg.disconnect_node(target_node.name)
-#             logger.info("Sub VFG changed (%d)", source_node.id)
+def _merge_load(vfg: VFG, starting_node_ids: Iterable[int]):
+    """"""
+    subvfg = vfg.get_subgraph(starting_node_ids)
+    # All upper LoadVFGNodes should be disconnected at the end of this pass
+    source_nodes: set[str] = set()
+    for i, edge in enumerate(subvfg.edges):
+        logger.debug("Merge_Load: %d/%d", i + 1, subvfg.edge_number)
+        source_node = vfg[edge.source]
+        target_node = vfg[edge.target]
+        if source_node.type == 'LoadVFGNode' and target_node.type == 'LoadVFGNode':
+            logger.info("Merge_Load(%d, %d)", source_node.id, target_node.id)
+            target_node.label = f'{source_node.label}\\n{target_node.label}'
+            for upper_node_name in source_node.upper_node_names:
+                vfg.add_edge(VFGEdge(upper_node_name, target_node.name))
+                source_nodes.add(edge.source)
+            logger.info("VFG changed (%d)", source_node.id)
+    for node_name in source_nodes:
+        vfg.disconnect_node(node_name)
 
 def _reverse_addr_store_edges(subvfg: VFG):
     """"""
@@ -166,8 +170,7 @@ def _get_leaf_store_nodes(subvfg: VFG) -> set[int]:
 
 
 def _vfg_passes(vfg: VFG):
-    # Pass 1
-    _remove_consecutive_gep_nodes(vfg)
+    _merge_consecutive_gep_nodes(vfg)
 
 
 def _subvfg_passes(vfg: VFG, starting_node_ids: Iterable[int]):
@@ -175,7 +178,7 @@ def _subvfg_passes(vfg: VFG, starting_node_ids: Iterable[int]):
     _connect_actual_ret_nodes(vfg, starting_node_ids)
     _merge_gep(vfg, starting_node_ids)
     _merge_copy(vfg, starting_node_ids)
-
+    _merge_load(vfg, starting_node_ids)
 
 def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _vfg_passes(vfg)
