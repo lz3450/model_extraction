@@ -1,10 +1,8 @@
-import os
 import logging
 from copy import deepcopy
 from typing import Iterable
 
 from .vfg_edge import VFGEdge
-from .vfg_node import VFGNode
 from .vfg import VFG
 from .log import config_logger
 
@@ -96,7 +94,7 @@ def _merge_gep(vfg: VFG, starting_node_ids: Iterable[int]):
     """Merge GepVFGNode with LoadVFGNode and StoreVFGNode."""
     subvfg = vfg.get_subgraph(starting_node_ids)
     for i, edge in enumerate(subvfg.edges):
-        logger.debug("Merge_Gep: %d/%d", i + 1, vfg.edge_number)
+        logger.debug("Merge_Gep: %d/%d", i + 1, subvfg.edge_number)
         source_node = vfg[edge.source]
         target_node = vfg[edge.target]
         if source_node.type == 'GepVFGNode' and target_node.type in ('LoadVFGNode', 'StoreVFGNode'):
@@ -111,6 +109,49 @@ def _merge_gep(vfg: VFG, starting_node_ids: Iterable[int]):
             else:
                 raise ValueError(edge)
             logger.info("VFG changed (%d)", source_node.id)
+
+
+def _merge_copy(vfg: VFG, starting_node_ids: Iterable[int]):
+    """Merge CopyVFGNode with its lower nodes."""
+    subvfg = vfg.get_subgraph(starting_node_ids)
+    for i, edge in enumerate(subvfg.edges):
+        logger.debug("Merge_Copy: %d/%d", i + 1, subvfg.edge_number)
+        source_node = vfg[edge.source]
+        target_node = vfg[edge.target]
+        if source_node.type == 'CopyVFGNode' and target_node.type in ('StoreVFGNode'):
+            logger.info("Merge_Copy(%d, %d)", source_node.id, target_node.id)
+            for upper_node_name in source_node.upper_node_names:
+                vfg.add_edge(VFGEdge(upper_node_name, target_node.name))
+            vfg.disconnect_node(edge.source)
+            target_node.label = f'{source_node.label} → {target_node.label.split(" → ")[1]}'
+            logger.info("VFG changed (%d)", source_node.id)
+
+
+# def _merge_addr_load_nodes(subvfg: VFG):
+#     """"""
+#     _subvfg = deepcopy(subvfg)
+#     for i, edge in enumerate(_subvfg.edges):
+#         logger.debug("Merge_Addr_Store: %d/%d", i + 1, _subvfg.edge_number)
+#         source_node = _subvfg[edge.source]
+#         target_node = _subvfg[edge.target]
+#         if source_node.type == 'AddrVFGNode' and target_node.type == 'LoadVFGNode':
+#             logger.info("Merge_Addr_Store(%d, %d)", source_node.id, target_node.id)
+#             source_node.label = target_node.label
+#             for lower_node_name in target_node.lower_node_names:
+#                 subvfg.add_edge(VFGEdge(source_node.name, lower_node_name))
+#             subvfg.disconnect_node(target_node.name)
+#             logger.info("Sub VFG changed (%d)", source_node.id)
+
+def _reverse_addr_store_edges(subvfg: VFG):
+    """"""
+    for i, edge in enumerate(subvfg.edges):
+        logger.debug("Rev_Addr_Store: %d/%d", i + 1, subvfg.edge_number)
+        source_node = subvfg[edge.source]
+        target_node = subvfg[edge.target]
+        if source_node.type == 'AddrVFGNode' and target_node.type == 'StoreVFGNode':
+            logger.info("Rev_Addr_Store(%d, %d)", source_node.id, target_node.id)
+            edge.reverse()
+            logger.info("Sub VFG changed (%d)", source_node.id)
 
 
 def _get_leaf_store_nodes(subvfg: VFG) -> set[int]:
@@ -133,6 +174,8 @@ def _subvfg_passes(vfg: VFG, starting_node_ids: Iterable[int]):
     _connect_actual_param_nodes(vfg, starting_node_ids)
     _connect_actual_ret_nodes(vfg, starting_node_ids)
     _merge_gep(vfg, starting_node_ids)
+    _merge_copy(vfg, starting_node_ids)
+
 
 def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _vfg_passes(vfg)
@@ -149,5 +192,6 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
 
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
+    _reverse_addr_store_edges(subvfg)
 
     return subvfg
