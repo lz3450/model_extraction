@@ -9,7 +9,8 @@ def config_logger(logger: logging.Logger):
     ch.setLevel(logging.DEBUG)
 
     # create formatter
-    formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    # formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter('[%(name)s] [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
     # add formatter to ch
     ch.setFormatter(formatter)

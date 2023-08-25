@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterator
+from typing import Iterator, Iterable
 import re
 import logging
 
@@ -129,7 +129,13 @@ class VFG:
                 matching_nodes.add(node)
         return matching_nodes
 
-    def get_subgraph(self, node_ids: list[int]) -> VFG:
+    def remove_unconnected_edges(self):
+        edge_to_del = [edge for node in self.nodes for edge in node if not self.has_node_name(edge.target) or not self.has_node_name(edge.source)]
+        for edge in edge_to_del:
+            self.remove_edge(edge)
+        logger.info("Sub VFG scale after removing unconnected edges: (node: %d, edge: %d)", self.node_number, self.edge_number)
+
+    def get_subgraph(self, node_ids: Iterable[int]) -> VFG:
         """
         Get all nodes connected to the given node.
         """
@@ -191,10 +197,21 @@ class VFG:
 
         visited_nodes = {name: self._nodes[name] for name in forward_visited | backward_visited}
         # visited_nodes = {name: self._nodes[name] for name in visited}
-        visited_edges = {
-            edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
+        visited_edges = {edge for edge in self._edges if edge.source in visited_nodes or edge.target in visited_nodes}
 
-        return VFG(visited_nodes, visited_edges)
+        subvfg = VFG(visited_nodes, visited_edges)
+        logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
+        return subvfg
+
+    def get_leaf_nodes(self) -> set[VFGNode]:
+        leaf_nodes = set()
+        for node in self.nodes:
+            for edge in node:
+                if edge.source == node.name:
+                    break
+            else:
+                leaf_nodes.add(node)
+        return leaf_nodes
 
     def write(self, output_file: str, label=None) -> None:
         """
@@ -209,7 +226,7 @@ class VFG:
             file.write(f'\tlabel="{label}";\n\n')
 
             # Write nodes
-            for node in self._nodes.values():
+            for node in self.nodes:
                 # file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth=2,label="{{{node.label}}}"];\n')
                 file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth={node.penwidth},label="{{{node.type} ID: {node.id}\\n{node.label}}}"];\n')
 

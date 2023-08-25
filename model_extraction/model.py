@@ -1,6 +1,7 @@
 import os
 import logging
 from copy import deepcopy
+from typing import Iterable
 
 from .vfg_edge import VFGEdge
 from .vfg_node import VFGNode
@@ -12,128 +13,141 @@ logger = logging.getLogger(__name__)
 config_logger(logger)
 
 
-def _connect_actual_param_nodes(vfg: VFG, subvfg: VFG) -> bool:
-    """Pass 3."""
-    for i, node in enumerate(subvfg.nodes):
-        if node.type == 'ActualParmVFGNode' and node.lower_node_number == 0:
-            logger.debug("Pass 3 (node): %d/%d", i + 1, subvfg.node_number)
-            if node.function is None or node.basic_block is None:
-                logger.warning('ActualParmVFGNode (%d) does not contains necessary information', node.id)
-                continue
-            ret_nodes = vfg.search_nodes('ActualRetVFGNode', node.function, node.basic_block)
-            matched_nodes = [ret_node for ret_node in ret_nodes if node.label in ret_node.ir and not node.has_edge(ret_node.name, 'out')]
-            if matched_nodes:
-                vfg.add_edge(VFGEdge(node.name, matched_nodes[0].name))
-                logger.info("VFG changed when processing ActualParmVFGNode (%d)", node.id)
-    return vfg.changed
-
-
-def _connect_actual_ret_nodes(vfg: VFG, subvfg: VFG):
-    """Pass 4."""
-    for i, node in enumerate(subvfg.nodes):
-        if node.type == 'ActualRetVFGNode' and node.upper_node_number < node.param_number:
-            logger.debug("Pass 4 (node): %d/%d", i + 1, subvfg.node_number)
-            if node.function is None or node.basic_block is None:
-                logger.warning('ActualRetVFGNode (%d) does not contains necessary information', node.id)
-                return
-            param_nodes = vfg.search_nodes('ActualParmVFGNode', node.function, node.basic_block)
-            matched_nodes = [param_node for param_node in param_nodes for param_label in node.params if param_label in param_node.ir and not node.has_edge(node.name, 'in')]
-            if matched_nodes:
-                for param_node in matched_nodes:
-                    vfg.add_edge(VFGEdge(param_node.name, node.name))
-                    logger.info("VFG changed when processing ActualRetVFGNode (%d)", node.id)
-    return vfg.changed
-
-
 def _remove_consecutive_gep_nodes(vfg: VFG):
-    """Pass 1."""
+    """Remove consecutive GepVFGNode."""
     _vfg = deepcopy(vfg)
     for i, edge in enumerate(_vfg.edges):
-        logger.debug("Pass 1 (edge): %d/%d", i + 1, vfg.edge_number)
+        logger.debug("Rm_Gep: %d/%d", i + 1, vfg.edge_number)
         source_node = vfg[edge.source]
         target_node = vfg[edge.target]
         if source_node.type == 'GepVFGNode' and target_node.type == 'GepVFGNode':
+            logger.debug("Rm_Gep(%d, %d)", source_node.id, target_node.id)
             target_node.label = f"{source_node.label}.{'.'.join(target_node.label.split('.')[1:])}"
             # must add_edge before disconnect_node
             for node_name in source_node.upper_node_names:
                 vfg.add_edge(VFGEdge(node_name, target_node.name))
             vfg.disconnect_node(source_node.name)
-            logger.info("VFG changed when removing \"GepVFGNode (%s)\"", source_node.id)
+            logger.debug("VFG changed (%s)", source_node.id)
 
 
-def _reverse_gep_store_edges(vfg: VFG):
+def _connect_actual_param_nodes(vfg: VFG, starting_node_ids: Iterable[int]):
+    """Parm -> Ret"""
+    it = 0
+    vfg_changed = True
+    while vfg_changed:
+        it += 1
+        vfg_changed = False
+        logger.info("Parm_Ret: %d", it)
+        subvfg = vfg.get_subgraph(starting_node_ids)
+        for i, node in enumerate(subvfg.nodes):
+            logger.debug("Parm_Ret: %d/%d", i + 1, subvfg.node_number)
+            if node.type == 'ActualParmVFGNode':
+                logger.info("Parm_Ret(%d)", node.id)
+                if node.function is None or node.basic_block is None:
+                    logger.warning('ActualParmVFGNode (%d) does not contains necessary information', node.id)
+                    continue
+                ret_nodes = vfg.search_nodes('ActualRetVFGNode', node.function, node.basic_block)
+                matched_nodes = [ret_node for ret_node in ret_nodes if node.label in ret_node.ir and not node.has_edge(ret_node.name, 'out')]
+                for matched_node in matched_nodes:
+                    vfg.add_edge(VFGEdge(node.name, matched_node.name))
+                    vfg_changed = True
+                    logger.info("VFG changed (%d, %d)", node.id, matched_node.id)
+
+
+def _connect_actual_ret_nodes(vfg: VFG, starting_node_ids: Iterable[int]):
+    """Ret -> Parm"""
+    it = 0
+    vfg_changed = True
+    while vfg_changed:
+        it += 1
+        vfg_changed = False
+        logger.info("Ret_Parm: %d", it)
+        subvfg = vfg.get_subgraph(starting_node_ids)
+        for i, node in enumerate(subvfg.nodes):
+            logger.debug("Ret_Parm: %d/%d", i + 1, subvfg.node_number)
+            if node.type == 'ActualRetVFGNode':
+                logger.info("Ret_Parm(%d)", node.id)
+                if node.function is None or node.basic_block is None:
+                    logger.warning('ActualRetVFGNode (%d) does not contains necessary information', node.id)
+                    return
+                param_nodes = vfg.search_nodes('ActualParmVFGNode', node.function, node.basic_block)
+                matched_nodes = [param_node for param_node in param_nodes for param_label in node.params if param_label in param_node.ir and not node.has_edge(node.name, 'in')]
+                if matched_nodes:
+                    for param_node in matched_nodes:
+                        vfg.add_edge(VFGEdge(param_node.name, node.name))
+                        vfg_changed = True
+                        logger.info("VFG changed (%d, %d)", param_node.id, node.id)
+
+
+def _reverse_gep_store_edges(subvfg: VFG):
     """Pass 2."""
-    _vfg = deepcopy(vfg)
+    _vfg = deepcopy(subvfg)
     for i, edge in enumerate(_vfg.edges):
-        logger.debug("Pass 2 (edge): %d/%d", i + 1, vfg.edge_number)
-        source_node = vfg[edge.source]
-        target_node = vfg[edge.target]
+        logger.debug("Pass 2 (edge): %d/%d", i + 1, subvfg.edge_number)
+        source_node = subvfg[edge.source]
+        target_node = subvfg[edge.target]
         if source_node.type == 'GepVFGNode' and target_node.type == 'StoreVFGNode':
             for e in source_node:
                 e.reverse()
-            logger.info("VFG changed when reversing Gep-Store edges \"GepVFGNode(%d)\"", source_node.id)
+            logger.info("VFG changed (%d)", source_node.id)
 
 
-def _merge_gep(vfg: VFG, subvfg: VFG):
-    """Pass 5."""
+def _merge_gep(vfg: VFG, starting_node_ids: Iterable[int]):
+    """Merge GepVFGNode with LoadVFGNode and StoreVFGNode."""
+    subvfg = vfg.get_subgraph(starting_node_ids)
     for i, edge in enumerate(subvfg.edges):
-        logger.debug("Pass 5 (edge): %d/%d", i + 1, vfg.edge_number)
+        logger.debug("Merge_Gep: %d/%d", i + 1, vfg.edge_number)
         source_node = vfg[edge.source]
         target_node = vfg[edge.target]
-        if source_node.type == 'GepVFGNode' and target_node.type == 'LoadVFGNode':
-            for lower_node_name in source_node.upper_node_names:
-                target_node.label = f'{source_node.label} → {target_node.label.split(" → ")[1]}'
-                vfg.add_edge(VFGEdge(lower_node_name, target_node.name))
+        if source_node.type == 'GepVFGNode' and target_node.type in ('LoadVFGNode', 'StoreVFGNode'):
+            logger.info("Merge_Gep(%d, %d)", source_node.id, target_node.id)
+            for upper_node_name in source_node.upper_node_names:
+                vfg.add_edge(VFGEdge(upper_node_name, target_node.name))
             vfg.disconnect_node(edge.source)
-            logger.info("VFG changed when reversing Gep-Load edges \"GepVFGNode(%d)\"", source_node.id)
-        elif target_node.type == 'GepVFGNode' and source_node.type == 'StoreVFGNode':
-            for lower_node_name in target_node.lower_node_names:
-                source_node.label = f'{source_node.label.split(" → ")[0]} → {target_node.label}'
-                vfg.add_edge(VFGEdge(source_node.name, lower_node_name))
-            vfg.disconnect_node(edge.target)
-            logger.info("VFG changed when reversing Gep-Store edges \"GepVFGNode(%d)\"", source_node.id)
+            if target_node.type == 'LoadVFGNode':
+                target_node.label = f'{source_node.label} → {target_node.label.split(" → ")[1]}'
+            elif target_node.type == 'StoreVFGNode':
+                target_node.label = f'{target_node.label.split(" → ")[0]} → {source_node.label}'
+            else:
+                raise ValueError(edge)
+            logger.info("VFG changed (%d)", source_node.id)
 
 
-def _remove_unconnected_edges(vfg: VFG) -> None:
-    """Pass 6."""
-    edge_to_del = [edge for node in vfg for edge in node if not vfg.has_node_name(edge.target) or not vfg.has_node_name(edge.source)]
-    for edge in edge_to_del:
-        vfg.remove_edge(edge)
+def _get_leaf_store_nodes(subvfg: VFG) -> set[int]:
+    leaf_store_nodes = set()
+    leaf_nodes = subvfg.get_leaf_nodes()
+
+    for node in leaf_nodes:
+        if node.type == 'StoreVFGNode':
+            leaf_store_nodes.add(node.id)
+    logger.info("Found leaf StoreVFGNode: %s", leaf_store_nodes)
+    return leaf_store_nodes
 
 
-def extract_model(vfg: VFG, starting_node_ids: list[int]) -> VFG:
+def _vfg_passes(vfg: VFG):
     # Pass 1
     _remove_consecutive_gep_nodes(vfg)
 
-    # Pass 2
-    _reverse_gep_store_edges(vfg)
 
-    # Pass 3
-    it = 0
+def _subvfg_passes(vfg: VFG, starting_node_ids: Iterable[int]):
+    _connect_actual_param_nodes(vfg, starting_node_ids)
+    _connect_actual_ret_nodes(vfg, starting_node_ids)
+    _merge_gep(vfg, starting_node_ids)
+
+def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
+    _vfg_passes(vfg)
+
+    ids = set(starting_node_ids)
     while True:
-        it += 1
-        logger.info("Pass 3 iteration %d", it)
-        subvfg = vfg.get_subgraph(starting_node_ids)
-        logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
-        if not _connect_actual_param_nodes(vfg, subvfg):
+        _subvfg_passes(vfg, ids)
+        subvfg = vfg.get_subgraph(ids)
+        leaf_store_nodes = _get_leaf_store_nodes(subvfg)
+        old_ids_len = len(ids)
+        ids.update(leaf_store_nodes)
+        if len(ids) == old_ids_len:
             break
 
-    # Pass 4
-    it = 0
-    while True:
-        it += 1
-        logger.info("Pass 4 iteration %d", it)
-        subvfg = vfg.get_subgraph(starting_node_ids)
-        logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
-        if not _connect_actual_ret_nodes(vfg, subvfg):
-            break
-
-    # Pass 5
-    # _merge_gep(vfg, subvfg)
-
-    subvfg = vfg.get_subgraph(starting_node_ids)
-    logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
-    _remove_unconnected_edges(subvfg)
-    logger.info("Sub VFG scale: (node: %d, edge: %d)", subvfg.node_number, subvfg.edge_number)
+    subvfg = vfg.get_subgraph(ids)
+    subvfg.remove_unconnected_edges()
 
     return subvfg
