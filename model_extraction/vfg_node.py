@@ -1,4 +1,4 @@
-from typing import Iterator, Iterable
+from typing import Iterator, Iterable, Generator
 import re
 import logging
 
@@ -57,7 +57,7 @@ class VFGNode:
     @property
     def color(self) -> str:
         return self._color
-    
+
     @property
     def penwidth(self) -> int:
         return self._penwidth
@@ -121,16 +121,16 @@ class VFGNode:
         return any(edge.source == self.name for edge in self._edges)
 
     @property
+    def outgoing_edges(self) -> Iterator[VFGEdge]:
+        return (edge for edge in self._edges if edge.source == self.name)
+
+    @property
     def upper_node_names(self) -> Iterator[str]:
-        for edge in self._edges:
-            if edge.target == self.name:
-                yield edge.source
+        return (edge.source for edge in self._edges if edge.target == self.name)
 
     @property
     def lower_node_names(self) -> Iterator[str]:
-        for edge in self._edges:
-            if edge.source == self.name:
-                yield edge.target
+        return (edge.target for edge in self._edges if edge.source == self.name)
 
     @property
     def upper_node_number(self) -> int:
