@@ -52,7 +52,7 @@ def _connect_actual_ret_nodes(vfg: VFG, starting_node_ids: Iterable[int]):
                     logger.warning('ActualRetVFGNode (%d) does not contains necessary information', node.id)
                     return
                 param_nodes = vfg.search_nodes('ActualParmVFGNode', node.function, node.basic_block)
-                matched_nodes = [param_node for param_node in param_nodes for param_label in node.params if param_label in param_node.ir and not node.has_edge(node.name, 'in')]
+                matched_nodes = [param_node for param_node in param_nodes for param_label in node.params if param_label in param_node.ir and not node.has_edge(param_node.name, 'in')]
                 if matched_nodes:
                     for param_node in matched_nodes:
                         vfg.add_edge(VFGEdge(param_node.name, node.name))
@@ -213,7 +213,7 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _remove_intraPHI(vfg, ids)
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
-    _reverse_addr_store_edges(subvfg)
+    # _reverse_addr_store_edges(subvfg)
 
     logger.info("Model scale: %d nodes, %d edges", subvfg.node_number, subvfg.edge_number)
 
