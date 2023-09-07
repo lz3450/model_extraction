@@ -222,12 +222,13 @@ class VFGNode:
         self._edges.remove(edge)
 
     def has_edge(self, node_name: str, direction: str) -> bool:
-        if direction not in ('in', 'out'):
-            raise ValueError("`direction` should be \"in\" or \"out\".")
-
-        attribute = 'source' if direction == 'in' else 'target'
-
-        return any(getattr(edge, attribute) == node_name for edge in self._edges)
+        match direction:
+            case 'in':
+                return any(edge.source == node_name for edge in self._edges)
+            case 'out':
+                return any(edge.target == node_name for edge in self._edges)
+            case _:
+                raise ValueError("`direction` should be \"in\" or \"out\".")
 
     def __iter__(self):
         yield from self._edges
