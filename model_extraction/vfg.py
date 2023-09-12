@@ -17,7 +17,6 @@ class VFG:
     def __init__(self, nodes: dict[str, VFGNode], edges: set[VFGEdge]) -> None:
         self._nodes = nodes
         self._edges = edges
-        self._changed = False
 
     @property
     def node_number(self) -> int:
@@ -35,17 +34,6 @@ class VFG:
     def edges(self) -> Iterator[VFGEdge]:
         yield from self._edges
 
-    @property
-    def changed(self) -> bool:
-        if self._changed:
-            self._changed = False
-            return True
-        return False
-
-    @changed.setter
-    def changed(self, value: bool):
-        self._changed = bool(value)
-
     def add_node(self, node_name: str, info: str) -> None:
         """
         Adds a new node to the graph.
@@ -57,7 +45,6 @@ class VFG:
             logger.warning("A node with the name %s already exists.", node_name)
         else:
             self._nodes[node_name] = VFGNode(node_name, info)
-            self.changed = True
 
     def add_edge(self, edge: VFGEdge) -> None:
         """
@@ -72,7 +59,6 @@ class VFG:
             self._edges.add(edge)
             self._nodes[edge.source].add_edge(edge)
             self._nodes[edge.target].add_edge(edge)
-            self.changed = True
 
     def disconnect_node(self, node_name: str) -> None:
         """
@@ -80,12 +66,10 @@ class VFG:
         """
         for edge in [_ for _ in self._nodes[node_name]]:
             self.remove_edge(edge)
-        self.changed = True
 
     def remove_node(self, node_name: str) -> None:
         self.disconnect_node(node_name)
         del self._nodes[node_name]
-        self.changed = True
 
     def remove_edge(self, edge: VFGEdge) -> None:
         """
@@ -96,7 +80,6 @@ class VFG:
             self._nodes[edge.source].remove_edge(edge)
         if self.has_node_name(edge.target):
             self._nodes[edge.target].remove_edge(edge)
-        self.changed = True
 
     def has_node_name(self, node_name) -> bool:
         return node_name in self._nodes
