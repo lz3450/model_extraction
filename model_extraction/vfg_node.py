@@ -1,4 +1,4 @@
-from typing import Iterator, Iterable, Generator
+from typing import Iterator, Iterable
 import re
 import logging
 
@@ -22,7 +22,7 @@ class VFGNode:
             self._ir = self._info[2]
         else:
             self._ir = ''
-            if self.type not in {'NullPtrVFGNode', 'FormalRetVFGNode'}:
+            if self.type not in ('NullPtrVFGNode', 'FormalRetVFGNode'):
                 logger.warning('%s (%d) does not contains IR code', self.type, self.id)
         match = re.search(r'Function\[(\S+)\]', self._ir)
         if match:
