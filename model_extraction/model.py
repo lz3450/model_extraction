@@ -60,6 +60,41 @@ def _connect_actual_ret_nodes(vfg: VFG, starting_node_ids: Iterable[int]):
                         logger.info("VFG changed (%d, %d)", param_node.id, node.id)
 
 
+def _disconnect_actual_formal_parm_nodes(vfg: VFG, starting_node_ids: Iterable[int]):
+    """ActualParm -|> FormalParm"""
+    NAME = "ActualParm -|> FormalParm"
+    it = 0
+    vfg_changed = True
+    while vfg_changed:
+        it += 1
+        vfg_changed = False
+        logger.info("%s: %d", NAME, it)
+        subvfg = vfg.get_subgraph(starting_node_ids)
+        for i, node in enumerate(subvfg.nodes):
+            logger.debug("%s: %d/%d", NAME, i + 1, subvfg.node_number)
+            if node.type == 'ActualParmVFGNode':
+                edge_to_remove = [edge for edge in node.outgoing_edges if vfg[edge.target].type == 'FormalParmVFGNode']
+                for edge in edge_to_remove:
+                    logger.info("%s(%d)", NAME, node.id)
+                    vfg.remove_edge(edge)
+                vfg_changed = len(edge_to_remove) > 0
+
+
+def _remove_intraPHI(vfg: VFG, starting_node_ids: Iterable[int]):
+    """"""
+    subvfg = vfg.get_subgraph(starting_node_ids)
+    edge_to_remove = set()
+    for node in subvfg.nodes:
+        if node.type == "IntraPHIVFGNode":
+            logger.info("RM_IntraPHI: %d", node.id)
+            for node_name in node.lower_node_names:
+                lower_node = vfg[node_name]
+                if lower_node.type == "FormalRetVFGNode":
+                    edge_to_remove.update(lower_node.outgoing_edges)
+    for edge in edge_to_remove:
+        vfg.remove_edge(edge)
+
+
 def _get_leaf_store_nodes(subvfg: VFG) -> set[int]:
     leaf_store_nodes: set[int] = set()
     leaf_nodes = subvfg.get_leaf_nodes()
@@ -164,19 +199,24 @@ def _merge_load_load(vfg: VFG, starting_node_ids: Iterable[int]):
         vfg.disconnect_node(node_name)
 
 
-def _remove_intraPHI(vfg: VFG, starting_node_ids: Iterable[int]):
+def _remove_actual_parm(vfg: VFG, starting_node_ids: Iterable[int]):
     """"""
+    NAME = "Merge_Load_ActualParm"
     subvfg = vfg.get_subgraph(starting_node_ids)
-    edge_to_remove = set()
-    for node in subvfg.nodes:
-        if node.type == "IntraPHIVFGNode":
-            logger.info("RM_IntraPHI: %d", node.id)
-            for node_name in node.lower_node_names:
-                lower_node = vfg[node_name]
-                if lower_node.type == "FormalRetVFGNode":
-                    edge_to_remove.update(lower_node.outgoing_edges)
-    for edge in edge_to_remove:
-        vfg.remove_edge(edge)
+    actual_parm_nodes: set[str] = set()
+    for i, edge in enumerate(subvfg.edges):
+        logger.debug("%s: %d/%d", NAME, i + 1, subvfg.edge_number)
+        source_node, target_node = vfg[edge.source], vfg[edge.target]
+        if source_node.type in ('LoadVFGNode', 'AddrVFGNode') and target_node.type == 'ActualParmVFGNode':
+            logger.info("%s(%d, %d)", NAME, source_node.id, target_node.id)
+            for lower_node_name in target_node.lower_node_names:
+                vfg.add_edge(VFGEdge(source_node.name, lower_node_name))
+            if target_node.lower_node_number == 0 and source_node.type == 'LoadVFGNode':
+                actual_parm_nodes.add(edge.source)
+            actual_parm_nodes.add(edge.target)
+            logger.info("VFG changed (%d)", target_node.id)
+    for node_name in actual_parm_nodes:
+        vfg.disconnect_node(node_name)
 
 
 def _reverse_addr_store_edges(subvfg: VFG):
@@ -197,6 +237,8 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     while True:
         _connect_actual_param_nodes(vfg, ids)
         _connect_actual_ret_nodes(vfg, ids)
+        _disconnect_actual_formal_parm_nodes(vfg, ids)
+        _remove_intraPHI(vfg, ids)
         subvfg = vfg.get_subgraph(ids)
         leaf_store_nodes = _get_leaf_store_nodes(subvfg)
         addr_store_nodes = _get_addr_store_nodes(vfg, subvfg)
@@ -210,10 +252,10 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _merge_gep_load_store(vfg, ids)
     _merge_copy(vfg, ids)
     _merge_load_load(vfg, ids)
-    _remove_intraPHI(vfg, ids)
+    _remove_actual_parm(vfg, ids)
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
-    # _reverse_addr_store_edges(subvfg)
+    _reverse_addr_store_edges(subvfg)
 
     logger.info("Model scale: %d nodes, %d edges", subvfg.node_number, subvfg.edge_number)
 
