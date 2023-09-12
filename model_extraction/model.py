@@ -165,14 +165,15 @@ def _merge_gep_load_store(vfg: VFG, starting_node_ids: Iterable[int]):
         vfg.disconnect_node(node_name)
 
 
-def _merge_copy(vfg: VFG, starting_node_ids: Iterable[int]):
+def _merge_copy_store(vfg: VFG, starting_node_ids: Iterable[int]):
     """Merge CopyVFGNode with its lower nodes."""
+    NAME = "Merge_Copy_Store"
     subvfg = vfg.get_subgraph(starting_node_ids)
     for i, edge in enumerate(subvfg.edges):
-        logger.debug("Merge_Copy: %d/%d", i + 1, subvfg.edge_number)
+        logger.debug("%s: %d/%d", NAME, i + 1, subvfg.edge_number)
         source_node, target_node = vfg[edge.source], vfg[edge.target]
-        if source_node.type == 'CopyVFGNode' and target_node.type in ('StoreVFGNode'):
-            logger.info("Merge_Copy(%d, %d)", source_node.id, target_node.id)
+        if source_node.type == 'CopyVFGNode' and target_node.type == 'StoreVFGNode':
+            logger.info("%s(%d, %d)", NAME, source_node.id, target_node.id)
             for upper_node_name in source_node.upper_node_names:
                 vfg.add_edge(VFGEdge(upper_node_name, target_node.name))
             vfg.disconnect_node(edge.source)
@@ -250,8 +251,8 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
 
     _merge_gep_gep(vfg, ids)
     _merge_gep_load_store(vfg, ids)
-    _merge_copy(vfg, ids)
     _merge_load_load(vfg, ids)
+    _merge_copy_store(vfg, ids)
     _remove_actual_parm(vfg, ids)
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
