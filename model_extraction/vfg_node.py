@@ -183,6 +183,8 @@ class VFGNode:
                 match = pattern.match(self.ir)
                 if match:
                     return match.group(1)
+            case 'FormalRetVFGNode':
+                self._label = '\n'.join(self._info)
             case 'ActualRetVFGNode':
                 pattern = re.compile(r'(%\S+) = (call|invoke) .+ (@\S+)\((.+)\)')
                 match = pattern.match(self.ir)
