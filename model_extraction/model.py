@@ -1,8 +1,8 @@
-import logging
-from copy import deepcopy
 from typing import Iterable
-
+import logging
+from collections import defaultdict
 from .vfg_edge import VFGEdge
+from .vfg_node import VFGNode
 from .vfg import VFG
 from .log import config_logger
 
@@ -220,6 +220,30 @@ def _remove_actual_parm(vfg: VFG, starting_node_ids: Iterable[int]):
         vfg.disconnect_node(node_name)
 
 
+def _merge_addr(vfg: VFG, starting_node_ids: Iterable[int]):
+    """"""
+    NAME = "Merge_Addr"
+    subvfg = vfg.get_subgraph(starting_node_ids)
+    addr_nodes: set[VFGNode] = set()
+    for i, node in enumerate(subvfg.nodes):
+        logger.debug("%s: %d/%d", NAME, i + 1, subvfg.edge_number)
+        if node.type == 'AddrVFGNode' and node.label.endswith("%this.addr"):
+            logger.info("%s(%d)", NAME, node.id)
+            addr_nodes.add(node)
+    grouped = defaultdict(list[VFGNode])
+    for node in addr_nodes:
+        grouped[node.variable_type].append(node)
+    for _, node_list in grouped.items():
+        sorted_list = sorted(node_list, key=lambda node: node.id)
+        first_node = sorted_list[0]
+        for node in sorted_list[1:]:
+            for incoming_edge in node.incoming_edges:
+                vfg.add_edge(VFGEdge(incoming_edge.source, first_node.name))
+            for outgoing_edge in node.outgoing_edges:
+                vfg.add_edge(VFGEdge(first_node.name, outgoing_edge.target))
+            vfg.disconnect_node(node.name)
+
+
 def _reverse_addr_store_edges(subvfg: VFG):
     """"""
     for i, edge in enumerate(subvfg.edges):
@@ -254,6 +278,7 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _merge_load_load(vfg, ids)
     _merge_copy_store(vfg, ids)
     _remove_actual_parm(vfg, ids)
+    _merge_addr(vfg, ids)
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
     _reverse_addr_store_edges(subvfg)
