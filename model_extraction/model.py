@@ -252,7 +252,7 @@ def _reverse_addr_store_edges(subvfg: VFG):
         if source_node.type == 'AddrVFGNode' and target_node.type == 'StoreVFGNode':
             logger.info("Rev_Addr_Store(%d, %d)", source_node.id, target_node.id)
             store_destination = target_node.label.split(' → ')[-1]
-            if source_node.label in store_destination:
+            if source_node.variable_name in store_destination:
                 edge.reverse()
                 logger.info("Edge(%d, %d) reversed", source_node.id, target_node.id)
 
