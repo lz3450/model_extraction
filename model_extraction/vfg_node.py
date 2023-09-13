@@ -18,24 +18,32 @@ class VFGNode:
         self._info = re.split(r',\\n\s*', label)
         self._edges: set[VFGEdge] = set()
         self._type, self._id = self._info[0].split(" ID: ")
+        # ir
         if self._info[2] != '(none)':
             self._ir = self._info[2]
         else:
             self._ir = ''
             if self.type not in ('NullPtrVFGNode', 'FormalRetVFGNode'):
                 logger.warning('%s (%d) does not contains IR code', self.type, self.id)
+        # function
         match = re.search(r'Function\[(\S+)\]', self._ir)
         if match:
             self._function = match.group(1)
         else:
             self._function = ''
+        # basic block
         match = re.search(r'BasicBlock\[(\S+)\]', self._ir)
         if match:
             self._basic_block = match.group(1)
         else:
             self._basic_block = ''
-        if self.type == 'ActualRetVFGNode':
-            self._params = ()
+        # type-specific property
+        match self.type:
+            case 'AddrVFGNode':
+                self._variable_type: str
+            case 'ActualRetVFGNode':
+                self._params: tuple
+        # label
         self._label = self._label_format()
 
     @property
@@ -81,6 +89,12 @@ class VFGNode:
     @property
     def basic_block(self) -> str:
         return self._basic_block
+
+    @property
+    def variable_type(self) -> str:
+        if self.type != 'AddrVFGNode':
+            raise AttributeError(f'"{self.type}" does not have variable_type attribute.')
+        return self._variable_type
 
     @property
     def params(self) -> tuple:
@@ -150,10 +164,11 @@ class VFGNode:
             return self.ir
         match self.type:
             case 'AddrVFGNode':
-                pattern = re.compile(r'(\S+) = .+')
+                pattern = re.compile(r'(\S+) = alloca (.+), align .+')
                 match = pattern.match(self.ir)
                 if match:
-                    return match.group(1)
+                    self._variable_type = match.group(2)
+                    return f"{match.group(2)} {match.group(1)}"
             case 'LoadVFGNode':
                 pattern = re.compile(r'(%\S+) = load .+([%@]\S+),')
                 match = pattern.match(self.ir)
