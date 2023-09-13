@@ -213,6 +213,7 @@ class VFG:
             for node in self.nodes:
                 # file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth=2,label="{{{node.label}}}"];\n')
                 file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth={node.penwidth},label="{{{node.type} ID: {node.id}\\n{node.label}}}"];\n')
+                # file.write(f'\t{node.name} [shape={node.shape},color={node.color},penwidth={node.penwidth},label="{{{node.type} ID: {node.id}\\n{node.label}\\n{node._info[1]}}}"];\n')
 
             # Write edges
             for edge in self._edges:
