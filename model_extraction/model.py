@@ -243,18 +243,52 @@ def _merge_addr(vfg: VFG, starting_node_ids: Iterable[int]):
                 vfg.add_edge(VFGEdge(first_node.name, outgoing_edge.target))
             vfg.disconnect_node(node.name)
 
-
-def _reverse_addr_store_edges(subvfg: VFG):
+def _remove_formal_store_addr(vfg: VFG, starting_node_ids: set[int]) -> set[int]:
     """"""
+    NAME = "RM_FormalParm_Store_Addr"
+    subvfg = vfg.get_subgraph(starting_node_ids)
+    store_node_to_remove: set[VFGNode] = set()
     for i, edge in enumerate(subvfg.edges):
-        logger.debug("Rev_Addr_Store: %d/%d", i + 1, subvfg.edge_number)
-        source_node, target_node = subvfg[edge.source], subvfg[edge.target]
-        if source_node.type == 'AddrVFGNode' and target_node.type == 'StoreVFGNode':
-            logger.info("Rev_Addr_Store(%d, %d)", source_node.id, target_node.id)
-            store_destination = target_node.label.split(' → ')[-1]
-            if source_node.variable_name in store_destination:
-                edge.reverse()
-                logger.info("Edge(%d, %d) reversed", source_node.id, target_node.id)
+        logger.debug("%s: %d/%d", NAME, i + 1, subvfg.edge_number)
+        source_node, target_node = vfg[edge.source], vfg[edge.target]
+        if source_node.type == 'FormalParmVFGNode' and target_node.type == 'StoreVFGNode':
+            logger.info("%s(%d, %d)", NAME, source_node.id, target_node.id)
+            store_node_to_remove.add(target_node)
+            logger.info("VFG changed (%d, %d)", source_node.id, target_node.id)
+    for node in store_node_to_remove:
+        vfg.disconnect_node(node.name)
+    return starting_node_ids - set(node.id for node in store_node_to_remove)
+
+
+def _reverse_store_dest_edges(subvfg: VFG):
+    """"""
+    NAME="Rev_Store"
+    for i, node in enumerate(subvfg.nodes):
+        logger.debug("%s_Dest: %d/%d", NAME, i + 1, subvfg.edge_number)
+        if node.type == 'StoreVFGNode':
+            store_destination = node.label.split(' → ')[-1]
+            for edge in node.incoming_edges:
+                upper_node = subvfg[edge.source]
+                match upper_node.type:
+                    case 'AddrVFGNode':
+                        logger.info("%s_Addr(%d, %d)", NAME, upper_node.id, node.id)
+                        if upper_node.variable_name in store_destination:
+                            edge.reverse()
+                            logger.info("Edge(%d, %d) reversed", upper_node.id, node.id)
+                    case 'LoadVFGNode':
+                        logger.info("%s_Load(%d, %d)", NAME, upper_node.id, node.id)
+                        load_destination = upper_node.label.split(' → ')[-1]
+                        if load_destination in store_destination:
+                            for upper_node_edge in upper_node.incoming_edges:
+                                upper_upper_node = subvfg[upper_node_edge.source]
+                                if upper_upper_node.type == 'AddrVFGNode':
+                                    # reverse addr -> load edges
+                                    upper_node_edge.reverse()
+                                    logger.info("Edge(%d, %d) reversed", upper_upper_node.id, upper_node.id)
+                            # reverse load -> store edges
+                            edge.reverse()
+                            logger.info("Edge(%d, %d) reversed", upper_node.id, node.id)
+
 
 
 def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
@@ -279,9 +313,10 @@ def extract_model(vfg: VFG, starting_node_ids: Iterable[int]) -> VFG:
     _merge_copy_store(vfg, ids)
     _remove_actual_parm(vfg, ids)
     _merge_addr(vfg, ids)
+    ids = _remove_formal_store_addr(vfg, ids)
     subvfg = vfg.get_subgraph(ids)
     subvfg.remove_unconnected_edges()
-    _reverse_addr_store_edges(subvfg)
+    _reverse_store_dest_edges(subvfg)
 
     logger.info("Model scale: %d nodes, %d edges", subvfg.node_number, subvfg.edge_number)
 
