@@ -99,12 +99,8 @@ class VFGNode:
     @property
     def params(self) -> tuple:
         if self.type != 'ActualRetVFGNode':
-            raise ValueError(f'"{self.type}" does not have param labels.')
+            raise AttributeError(f'"{self.type}" does not have params attribute.')
         return self._params
-
-    @params.setter
-    def params(self, values: Iterable):
-        self._params = tuple(values)
 
     @property
     def param_number(self) -> int:
@@ -213,7 +209,7 @@ class VFGNode:
                         param_match = param_pattern.match(param)
                         if param_match:
                             param_labels.append(param_match.group(1))
-                    self.params = param_labels
+                    self._params = tuple(param_labels)
                     return f"{retval} = {func_name}({', '.join(param_labels)})"
             case 'BinaryOPVFGNode':
                 pattern = re.compile(r'(%\S+) = (fmul|fadd) .+ (%\S+), (%\S+)')
