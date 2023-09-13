@@ -41,6 +41,7 @@ class VFGNode:
         match self.type:
             case 'AddrVFGNode':
                 self._variable_type: str
+                self._variable_name: str
             case 'ActualRetVFGNode':
                 self._params: tuple
         # label
@@ -95,6 +96,12 @@ class VFGNode:
         if self.type != 'AddrVFGNode':
             raise AttributeError(f'"{self.type}" does not have variable_type attribute.')
         return self._variable_type
+
+    @property
+    def variable_name(self) -> str:
+        if self.type != 'AddrVFGNode':
+            raise AttributeError(f'"{self.type}" does not have variable_type attribute.')
+        return self._variable_name
 
     @property
     def params(self) -> tuple:
@@ -168,6 +175,7 @@ class VFGNode:
                 match = pattern.match(self.ir)
                 if match:
                     self._variable_type = match.group(2)
+                    self._variable_name = match.group(1)
                     return f"{match.group(2)} {match.group(1)}"
             case 'LoadVFGNode':
                 pattern = re.compile(r'(%\S+) = load .+([%@]\S+),')
