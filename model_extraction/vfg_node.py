@@ -1,4 +1,4 @@
-from typing import Iterator, Iterable
+from typing import Iterator
 import re
 import logging
 
@@ -129,6 +129,10 @@ class VFGNode:
         :return: True if the node has incoming edges, False otherwise.
         """
         return any(edge.source == self.name for edge in self._edges)
+
+    @property
+    def incoming_edges(self) -> Iterator[VFGEdge]:
+        return (edge for edge in self._edges if edge.target == self.name)
 
     @property
     def outgoing_edges(self) -> Iterator[VFGEdge]:
