@@ -63,17 +63,23 @@ class VFGNode:
         ir = self.info[2]
         f = ''
         bb = ''
-        if ir != '(none)':
+
+        if not ir.startswith('(none)'):
             match = PATTERNS['Function'].search(ir)
             if match:
                 f = match.group(1)
             match = PATTERNS['BasicBlock'].search(ir)
             if match:
                 bb = match.group(1)
+        elif self.type == 'FormalRet':
+            match = PATTERNS['Function'].search(self.info[1])
+            if match:
+                f = match.group(1)
         else:
             ir = ''
-            if self.type not in ('NullPtr', 'FormalRet'):
+            if self.type != 'NullPtr':
                 logger.warning('%s (%d) does not contains IR code', self.type, self.id)
+
         return ir, f, bb
 
     def _compile_info(self) -> str:
@@ -278,7 +284,6 @@ class VFG:
                 actual_ret.add_upper_nodes(actual_parm)
 
         def _find_paths_of_store(store_node: VFGNode, paths: list[list[VFGNode]]):
-            assert store_node.upper_node_len == 2
             assert store_node.lower_node_len == 0
             logger.info('Store(%d)', store_node.id)
             for upper_node in store_node.upper_nodes:
