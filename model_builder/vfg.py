@@ -198,28 +198,20 @@ class VFGNode:
         return self._args
 
     @property
-    def upper_nodes(self) -> Iterator[VFGNode]:
-        yield from self._upper_nodes
+    def upper_node_len(self) -> int:
+        return len(self.upper_nodes)
 
     @property
-    def lower_nodes(self) -> Iterator[VFGNode]:
-        yield from self._lower_nodes
-
-    @property
-    def upper_node_number(self) -> int:
-        return len(self._upper_nodes)
-
-    @property
-    def lower_node_number(self) -> int:
-        return len(self._lower_nodes)
+    def lower_node_len(self) -> int:
+        return len(self.lower_nodes)
 
     def add_upper_nodes(self, node: VFGNode):
         if node != self:
-            self._upper_nodes.add(node)
+            self.upper_nodes.add(node)
 
     def add_lower_nodes(self, node: VFGNode):
         if node != self:
-            self._lower_nodes.add(node)
+            self.lower_nodes.add(node)
 
 
 class VFG:
