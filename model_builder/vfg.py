@@ -262,44 +262,62 @@ class VFG:
                 matched_nodes.add(node)
         return matched_nodes
 
-    def _connect_actual_param_ret(self, actual_parm: VFGNode):
-        logger.debug("Actual_Parm_Ret(%d)", actual_parm.id)
-        if not actual_parm.function or not actual_parm.basic_block:
-            logger.warning('%s(%d) does not contains necessary information', actual_parm.type, actual_parm.id)
-        ret_nodes = self.search_nodes('ActualRet', actual_parm.function, actual_parm.basic_block)
-        actual_ret_nodes = [ret_node for ret_node in ret_nodes if actual_parm.parm in ret_node.args]
-        for actual_ret in actual_ret_nodes:
-            logger.info("Actual_Parm_Ret(%d, %d)", actual_parm.id, actual_ret.id)
-            actual_parm.add_lower_nodes(actual_ret)
-            actual_ret.add_upper_nodes(actual_parm)
-
     def get_paths(self, start_node_ids: Iterable[int]) -> list[list[VFGNode]]:
-        paths: list[list[VFGNode]] = []
 
-        def _find_paths(node: VFGNode, path: list[VFGNode], direction: str):
+        def _connect_actual_param_ret(actual_parm: VFGNode):
+            logger.debug("Actual_Parm_Ret(%d)", actual_parm.id)
+            if not actual_parm.function or not actual_parm.basic_block:
+                logger.warning('%s(%d) does not contains necessary information', actual_parm.type, actual_parm.id)
+            ret_nodes = self.search_nodes('ActualRet', actual_parm.function, actual_parm.basic_block)
+            actual_ret_nodes = [ret_node for ret_node in ret_nodes if actual_parm.parm in ret_node.args]
+            for actual_ret in actual_ret_nodes:
+                logger.info("Actual_Parm_Ret(%d, %d)", actual_parm.id, actual_ret.id)
+                actual_parm.add_lower_nodes(actual_ret)
+                actual_ret.add_upper_nodes(actual_parm)
+
+        def _find_paths_of_store(store_node: VFGNode, paths: list[list[VFGNode]]):
+            assert store_node.upper_node_len == 2
+            assert store_node.lower_node_len == 0
+            logger.info('Store(%d)', store_node.id)
+            for upper_node in store_node.upper_nodes:
+                _find_paths(upper_node, 'b', [upper_node, store_node], paths)
+
+        def _find_another_path_of_binaryop(binaryop_node: VFGNode, one_path: list[VFGNode], paths: list[list[VFGNode]]):
+            assert binaryop_node.upper_node_len == 2
+            assert binaryop_node.lower_node_len == 1
+            one_upper_node = one_path[-2]
+            another_upper_node = (binaryop_node.upper_nodes - {one_upper_node}).pop()
+            logger.info('BinaryOP(%d, %d)', another_upper_node.id, binaryop_node.id)
+            _find_paths(another_upper_node, 'b', [another_upper_node, binaryop_node], paths)
+
+        def _find_paths(node: VFGNode, direction: str, path: list[VFGNode], paths: list[list[VFGNode]]):
             match node.type:
                 case 'ActualParm':
-                    self._connect_actual_param_ret(node)
+                    _connect_actual_param_ret(node)
                 case 'Store':
-                    pass
+                    _find_paths_of_store(node, paths)
+                    return
             if direction == 'f':
-                if node.lower_node_number == 0:
+                if node.lower_node_len == 0:
                     paths.append(path)
                     return
                 for lower_node in node.lower_nodes:
-                    _find_paths(lower_node, path + [lower_node], direction)
+                    _find_paths(lower_node, direction, path + [lower_node], paths)
             elif direction == 'b':
-                if node.upper_node_number == 0:
+                if node.upper_node_len == 0:
                     paths.append(path)
                     return
                 for upper_node in node.upper_nodes:
-                    _find_paths(upper_node, [upper_node] + path, direction)
+                    _find_paths(upper_node, direction, [upper_node] + path, paths)
+            else:
+                raise ValueError('Unknown direction')
 
+        all_paths: list[list[VFGNode]] = []
         for start_node in (self.get_node_from_id(id) for id in start_node_ids):
-            _find_paths(start_node, [start_node], 'f')
-            _find_paths(start_node, [start_node], 'b')
+            _find_paths(start_node, 'f', [start_node], all_paths)
+            _find_paths(start_node, 'b', [start_node], all_paths)
 
-        return paths
+        return all_paths
 
     def write(self, filename: str, name: str, label: str):
         nodes: set[Node] = set()
