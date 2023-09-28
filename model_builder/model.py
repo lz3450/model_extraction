@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Iterable, Iterator
 from itertools import pairwise
 from .graph import Node, Edge, Graph
-from .vfg import VFGNode, VFG
+from .vfg import VFG
 from .log import get_logger
 
 logger = get_logger(__name__)
