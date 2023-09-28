@@ -45,13 +45,13 @@ PATTERNS: dict[str, re.Pattern] = {
 class VFGNode:
     def __init__(self, node: Node):
         self.name = node.name
-        self.info = PATTERNS['NodeLabelSeparation'].split(node.label.strip('{}'))
+        self.info = PATTERNS['NodeLabelSeparation'].split(node.label.removeprefix('{').removesuffix('}'))
         self.type, self.id = self._get_type_and_id()
         self.t = SHORT_TYPE[self.type]
         self.ir, self.function, self.basic_block = self._get_ir()
         self.label = f'{self.type}({self.id})\\n{self._compile_ir()}'
-        self._upper_nodes = set()
-        self._lower_nodes = set()
+        self.upper_nodes: set[VFGNode] = set()
+        self.lower_nodes: set[VFGNode] = set()
 
     def _get_type_and_id(self) -> tuple[str, int]:
         type_and_id = self.info[0].split(" ID: ")
