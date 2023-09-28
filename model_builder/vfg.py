@@ -321,8 +321,10 @@ class VFG:
 
         all_paths: list[list[VFGNode]] = []
         for start_node in (self.get_node_from_id(id) for id in start_node_ids):
-            _find_paths(start_node, 'f', [start_node], all_paths)
-            _find_paths(start_node, 'b', [start_node], all_paths)
+            if start_node.lower_node_len > 0:
+                _find_paths(start_node, 'f', [start_node], all_paths)
+            if start_node.upper_node_len > 0:
+                _find_paths(start_node, 'b', [start_node], all_paths)
 
         return all_paths
 
