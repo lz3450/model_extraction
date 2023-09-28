@@ -236,7 +236,7 @@ class VFG:
 
     @property
     def edge_number(self) -> int:
-        return sum(node.upper_node_number + node.lower_node_number for node in self) // 2
+        return sum(node.upper_node_len + node.lower_node_len for node in self) // 2
 
     @property
     def size(self) -> tuple[int, int]:
