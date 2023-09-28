@@ -126,7 +126,8 @@ class VFGNode:
                     self._parm = group1 if group1 else group2
                     return self._parm
             case 'FormalRet':
-                return '\n'.join(self.info)
+                # return '\\n'.join(self.info)
+                return ''
             case 'ActualRet':
                 pattern = PATTERNS[self.type]
                 match = pattern.match(self.ir)
