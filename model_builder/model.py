@@ -19,7 +19,8 @@ class ModelNode:
         yield from self._lower_nodes
 
     def add_lower_nodes(self, node: ModelNode):
-        self._lower_nodes.add(node)
+        if node != self:
+            self._lower_nodes.add(node)
 
     def __eq__(self, other) -> bool:
         if isinstance(other, ModelNode):

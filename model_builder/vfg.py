@@ -213,10 +213,12 @@ class VFGNode:
         return len(self._lower_nodes)
 
     def add_upper_nodes(self, node: VFGNode):
-        self._upper_nodes.add(node)
+        if node != self:
+            self._upper_nodes.add(node)
 
     def add_lower_nodes(self, node: VFGNode):
-        self._lower_nodes.add(node)
+        if node != self:
+            self._lower_nodes.add(node)
 
 
 class VFG:
