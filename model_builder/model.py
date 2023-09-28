@@ -50,7 +50,9 @@ class Model:
     def write(self, filename: str, name: str, label: str):
         nodes: set[Node] = {Node(str(node.id), node.label) for node in self}
         edges: set[Edge] = {Edge(str(node.id), str(lower_node.id)) for node in self for lower_node in node.lower_nodes}
-        Graph(nodes, edges, name, label).write(filename)
+        graph = Graph(nodes, edges, name, label)
+        logger.info("Model size: %s", graph.size)
+        graph.write(filename)
 
     @classmethod
     def build_model(cls, vfg: VFG, start_node_ids: Iterable[int]) -> Model:
