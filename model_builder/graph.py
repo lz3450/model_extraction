@@ -64,6 +64,10 @@ class Graph:
     def __repr__(self) -> str:
         return f'Graph({len(self.nodes)},{len(self.edges)})'
 
+    @property
+    def size(self) -> tuple[int, int]:
+        return len(self.nodes), len(self.edges)
+
     def write(self, filename: str):
         with open(filename, mode='w', encoding='utf-8') as file:
             file.write(f'digraph "{self.name}"')
