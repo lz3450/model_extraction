@@ -74,9 +74,9 @@ class Graph:
             file.write('{\n')
             file.write('\trankdir="LR";\n')
             file.write(f'\tlabel="{self.label}";\n\n')
-            for node in self.nodes:
+            for node in sorted(self.nodes, key=lambda node: int(node.name)):
                 file.write(f'\t{node}\n')
-            for edge in self.edges:
+            for edge in sorted(self.edges, key=lambda edge: (int(edge.source), int(edge.target))):
                 file.write(f'\t{edge}\n')
             file.write("}\n")
 
