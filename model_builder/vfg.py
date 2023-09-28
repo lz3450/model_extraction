@@ -19,6 +19,7 @@ SHORT_TYPE: dict[str, str] = {
     'FormalRet': '<',
     'ActualRet': '>',
     'BinaryOP': 'b',
+    'UnaryOP': 'u',
     'IntraPHI': 'i',
     'Branch': '^',
     'Cmp': '%',
@@ -49,7 +50,7 @@ class VFGNode:
         self.type, self.id = self._get_type_and_id()
         self.t = SHORT_TYPE[self.type]
         self.ir, self.function, self.basic_block = self._get_ir()
-        self.label = f'{self.type}({self.id})\\n{self._compile_ir()}'
+        self.label = f'{self.type}({self.id})\\n{self._compile_info()}'
         self.upper_nodes: set[VFGNode] = set()
         self.lower_nodes: set[VFGNode] = set()
 
@@ -75,7 +76,7 @@ class VFGNode:
                 logger.warning('%s (%d) does not contains IR code', self.type, self.id)
         return ir, f, bb
 
-    def _compile_ir(self) -> str:
+    def _compile_info(self) -> str:
         if not self.ir:
             return ''
         match self.type:
@@ -126,8 +127,7 @@ class VFGNode:
                     self._parm = group1 if group1 else group2
                     return self._parm
             case 'FormalRet':
-                # return '\\n'.join(self.info)
-                return ''
+                return self.function
             case 'ActualRet':
                 pattern = PATTERNS[self.type]
                 match = pattern.match(self.ir)
@@ -148,15 +148,17 @@ class VFGNode:
                 match = pattern.match(self.ir)
                 if match:
                     return f'{match.group(1)} = {match.group(2)}({match.group(3)}, {match.group(4)})'
+            case 'UnaryOP':
+                pass
             case 'IntraPHI':
                 return self.function
             case 'Branch':
-                return '\n'.join(self.info)
+                pass
             case 'Cmp':
-                return '\n'.join(self.info)
+                pass
             case _:
                 raise ValueError(f'Unknown VFG node type {self.type}')
-        return self.ir
+        return '\\n'.join(self.info)
 
     def __repr__(self) -> str:
         return f'{self.type}({self.id}, {self.name})'
