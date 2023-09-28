@@ -283,18 +283,28 @@ class VFG:
     def get_paths(self, start_node_ids: Iterable[int]) -> list[list[VFGNode]]:
         paths: list[list[VFGNode]] = []
 
-        def _find_paths(node: VFGNode, path: list[VFGNode]):
+        def _find_paths(node: VFGNode, path: list[VFGNode], direction: str):
             match node.type:
                 case 'ActualParm':
                     self._connect_actual_param_ret(node)
-            if node.lower_node_number == 0:
-                paths.append(path)
-                return
-            for lower_node in node.lower_nodes:
-                _find_paths(lower_node, path + [lower_node])
+                case 'Store':
+                    pass
+            if direction == 'f':
+                if node.lower_node_number == 0:
+                    paths.append(path)
+                    return
+                for lower_node in node.lower_nodes:
+                    _find_paths(lower_node, path + [lower_node], direction)
+            elif direction == 'b':
+                if node.upper_node_number == 0:
+                    paths.append(path)
+                    return
+                for upper_node in node.upper_nodes:
+                    _find_paths(upper_node, [upper_node] + path, direction)
 
         for start_node in (self.get_node_from_id(id) for id in start_node_ids):
-            _find_paths(start_node, [start_node])
+            _find_paths(start_node, [start_node], 'f')
+            _find_paths(start_node, [start_node], 'b')
 
         return paths
 
