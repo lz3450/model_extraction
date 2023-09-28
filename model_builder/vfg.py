@@ -245,6 +245,10 @@ class VFG:
     def edge_number(self) -> int:
         return sum(node.upper_node_number + node.lower_node_number for node in self) // 2
 
+    @property
+    def size(self) -> tuple[int, int]:
+        return self.node_number, self.edge_number
+
     def get_node_from_id(self, id: int) -> VFGNode:
         """
         Convert node ID to node name.
