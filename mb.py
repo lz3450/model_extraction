@@ -19,7 +19,7 @@ def test1():
 
 def test2():
     vfg = VFG.from_file('examples/tf2/vfg.dot')
-    logger.info("VFG scale: (node: %d, edge: %d)", vfg.node_number, vfg.edge_number)
+    logger.info("VFG scale: %s", vfg.size)
     starting_node_ids = {1479, 1543}
     logger.info("Starting nodes: %s", starting_node_ids)
     model = Model.build_model(vfg, starting_node_ids)
