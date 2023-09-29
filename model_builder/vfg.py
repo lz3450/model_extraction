@@ -20,10 +20,15 @@ SHORT_TYPE: dict[str, str] = {
     'ActualRet': '>',
     'BinaryOP': 'b',
     'UnaryOP': 'u',
-    'IntraPHI': 'i',
+    'IntraPHI': 'p',
     'Branch': '^',
     'Cmp': '%',
-    'NullPtr': 'n'
+    'NullPtr': 'n',
+    'FormalINS': '+',
+    'FormalOUTS': '-',
+    'ActualINS': 'i',
+    'ActualOUTS': 'o',
+    'IntraMSSAPHIS': 'm'
 }
 
 PATTERNS: dict[str, re.Pattern] = {
@@ -161,6 +166,16 @@ class VFGNode:
             case 'Branch':
                 pass
             case 'Cmp':
+                pass
+            case 'FormalINS':
+                pass
+            case 'FormalOUTS':
+                pass
+            case 'ActualINS':
+                pass
+            case 'ActualOUTS':
+                pass
+            case 'IntraMSSAPHIS':
                 pass
             case _:
                 raise ValueError(f'Unknown VFG node type {self.type}')
