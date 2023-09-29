@@ -221,11 +221,11 @@ class VFGNode:
         return self._args
 
     @property
-    def upper_node_len(self) -> int:
+    def upper_node_number(self) -> int:
         return len(self.upper_nodes)
 
     @property
-    def lower_node_len(self) -> int:
+    def lower_node_number(self) -> int:
         return len(self.lower_nodes)
 
     def add_upper_nodes(self, node: VFGNode):
@@ -259,7 +259,7 @@ class VFG:
 
     @property
     def edge_number(self) -> int:
-        return sum(node.upper_node_len + node.lower_node_len for node in self) // 2
+        return sum(node.upper_node_number + node.lower_node_number for node in self) // 2
 
     @property
     def size(self) -> tuple[int, int]:
