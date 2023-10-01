@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Iterator, Iterable
+from typing import Iterator
 import re
+import subprocess
 
 from .graph import Node, Edge, Graph
 from .log import get_logger
@@ -43,7 +44,7 @@ PATTERNS: dict[str, re.Pattern] = {
     'Copy': re.compile(r'(%\S+) = (sitofp|fpext|bitcast|fptrunc) .+ (%\S+) to .+,'),
     'FormalParm': re.compile(r'\S+ (%\S+)'),
     'ActualParm': re.compile(r'(%\S+) = .+|\S+ (%\S+)'),
-    'ActualRet': re.compile(r'(%\S+) = (call|invoke) .+ (@\S+)\((.+)\)'),
+    'ActualRet': re.compile(r'(%\S+) = (call|invoke) .+ @(\S+)\((.+)\)'),
     'BinaryOP': re.compile(r'(%\S+) = (fmul|fadd) .+ (%\S+), (%\S+)'),
 }
 
@@ -59,6 +60,10 @@ class VFGNode:
         self.upper_nodes: set[VFGNode] = set()
         self.lower_nodes: set[VFGNode] = set()
 
+    @staticmethod
+    def demangle(mangled_name: str) -> str:
+        return subprocess.run(['c++filt', '-p', mangled_name], capture_output=True, text=True, check=True).stdout.strip().replace('<', '\\<').replace('>', '\\>')
+
     def _get_type_and_id(self) -> tuple[str, int]:
         type_and_id = self.info[0].split(" ID: ")
         assert len(type_and_id) == 2, f'Invalid format for VFGNode "{self.name}" type and ID information'
@@ -72,7 +77,7 @@ class VFGNode:
         if not ir.startswith('(none)'):
             match = PATTERNS['Function'].search(ir)
             if match:
-                f = match.group(1)
+                f = VFGNode.demangle(match.group(1))
             match = PATTERNS['BasicBlock'].search(ir)
             if match:
                 bb = match.group(1)
@@ -153,7 +158,7 @@ class VFGNode:
                         if arg_match:
                             arg_labels.append(arg_match.group(1))
                     self._args = tuple(arg_labels)
-                    return f"{self._retval} = {self._fnptrval}({', '.join(arg_labels)})"
+                    return f"{self._retval} = {VFGNode.demangle(self._fnptrval)}({', '.join(arg_labels)})"
             case 'BinaryOP':
                 pattern = PATTERNS[self.type]
                 match = pattern.match(self.ir)
@@ -299,4 +304,5 @@ class VFG:
 
     @classmethod
     def from_file(cls, filename: str) -> VFG:
+        logger.info('Reading VFG from "%s"', filename)
         return cls(Graph.from_file(filename))
