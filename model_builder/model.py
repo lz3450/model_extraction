@@ -81,7 +81,7 @@ class ModelNode:
 
 
 class Model:
-    pattern = re.compile('(?<=a|l)(?P<GL>g+l)|(?P<GS>g+s)|(?P<AS>as)|(?P<CS>cs)|.')
+    pattern = re.compile(r'(?<=a|l)(?P<GL>g+l)|(?P<GS>g+s)|(?P<AS>as)|(?P<CS>cs)|.')
 
     def __init__(self, vfg: VFG, start_vfg_node_ids: Iterable[int]):
         self.vfg = vfg
