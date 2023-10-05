@@ -56,7 +56,8 @@ class VFGNode:
         self.type, self.id = self._get_type_and_id()
         self.t = SHORT_TYPE[self.type]
         self.ir, self.function, self.basic_block = self._get_ir()
-        self.label = f'{self.type}({self.id})\\n{self._compile_info()}'
+        # self.label = f'{self.type}({self.id})\\n{self._compile_info()}'
+        self.compiled_info = self._compile_info()
         self.upper_nodes: set[VFGNode] = set()
         self.lower_nodes: set[VFGNode] = set()
 
@@ -75,16 +76,13 @@ class VFGNode:
         bb = ''
 
         if not ir.startswith('(none)'):
-            match = PATTERNS['Function'].search(ir)
-            if match:
+            if match := PATTERNS['Function'].search(ir):
                 f = VFGNode.demangle(match.group(1))
-            match = PATTERNS['BasicBlock'].search(ir)
-            if match:
+            if match := PATTERNS['BasicBlock'].search(ir):
                 bb = match.group(1)
         elif self.type == 'FormalRet':
-            match = PATTERNS['Function'].search(self.info[1])
-            if match:
-                f = match.group(1)
+            if match := PATTERNS['Function'].search(self.info[1]):
+                f = VFGNode.demangle(match.group(1))
         else:
             ir = ''
             if self.type != 'NullPtr':
@@ -97,25 +95,20 @@ class VFGNode:
             return ''
         match self.type:
             case 'Addr':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     self._var_type = match.group(2)
                     self._ptr = match.group(1)
                     return f"{self._var_type} {self._ptr}"
             case 'Load':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
+                match = PATTERNS[self.type].match(self.ir)
                 if match:
                     self._ptr = match.group(2)
                     self._var = match.group(1)
                     return f'{self._ptr} → {self._var}'
             case 'Store':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
-                    self._var = match.group(1)
-                    self._ptr = match.group(2)
+                if match := PATTERNS[self.type].match(self.ir):
+                    self._var = match[1]
+                    self._ptr = match[2]
                     return f'{self._var} → {self._ptr}'
             case 'Gep':
                 pattern = PATTERNS[self.type]
@@ -125,10 +118,10 @@ class VFGNode:
                     self._ptr = match.group(4)
                     return f'{self._ptr}.{self._elementptr}'
             case 'Copy':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
-                    return f'{match.group(3)} → {match.group(1)}'
+                if match := PATTERNS[self.type].match(self.ir):
+                    self._from_var = match[3]
+                    self._to_var = match[1]
+                    return f'{self._from_var} → {self._to_var}'
             case 'FormalParm':
                 pattern = PATTERNS[self.type]
                 match = pattern.match(self.ir)
@@ -145,9 +138,7 @@ class VFGNode:
             case 'FormalRet':
                 return self.function
             case 'ActualRet':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     self._retval = match.group(1)
                     self._fnptrval = match.group(3)
                     args = match.group(4)
@@ -160,10 +151,9 @@ class VFGNode:
                     self._args = tuple(arg_labels)
                     return f"{self._retval} = {VFGNode.demangle(self._fnptrval)}({', '.join(arg_labels)})"
             case 'BinaryOP':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
-                    return f'{match.group(1)} = {match.group(2)}({match.group(3)}, {match.group(4)})'
+                if match := PATTERNS[self.type].match(self.ir):
+                    self._parms = (match[3], match[4])
+                    return f'{match[1]} = {match[2]}({", ".join(self._parms)})'
             case 'UnaryOP':
                 pass
             case 'IntraPHI':
@@ -202,16 +192,40 @@ class VFGNode:
         return self._ptr
 
     @property
+    def var(self) -> str:
+        if self.t not in 'ls':
+            raise AttributeError(f'"{self.type}" does not have `var` attribute.')
+        return self._var
+
+    @property
     def elementptr(self) -> str:
         if self.t != 'g':
             raise AttributeError(f'"{self.type}" does not have `elementptr` attribute.')
         return self._elementptr
 
     @property
+    def from_var(self) -> str:
+        if self.t != 'c':
+            raise AttributeError(f'"{self.type}" does not have `from_var` attribute.')
+        return self._from_var
+
+    @property
+    def to_var(self) -> str:
+        if self.t != 'c':
+            raise AttributeError(f'"{self.type}" does not have `to_var` attribute.')
+        return self._to_var
+
+    @property
     def parm(self) -> str:
         if self.t not in '()':
             raise AttributeError(f'"{self.type}" does not have `parm` attribute.')
         return self._parm
+
+    @property
+    def parms(self) -> str:
+        if self.t != 'b':
+            raise AttributeError(f'"{self.type}" does not have `parms` attribute.')
+        return str(self._parms)
 
     @property
     def retval(self) -> str:
@@ -295,7 +309,7 @@ class VFG:
         edges: set[Edge] = set()
 
         for node in self:
-            nodes.add(Node(node.name, node.label))
+            nodes.add(Node(node.name, node.compiled_info))
             for upper_node in node.upper_nodes:
                 edges.add(Edge(upper_node.name, node.name))
             for lower_node in node.lower_nodes:
