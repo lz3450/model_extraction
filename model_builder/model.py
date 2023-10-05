@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Iterable, Iterator
 from itertools import pairwise
+import re
+from collections import Counter
 from .graph import Node, Edge, Graph
 from .vfg import VFGNode, VFG
 from .log import get_logger
@@ -8,19 +10,47 @@ from .log import get_logger
 logger = get_logger(__name__)
 
 
+MODEL_NODE_COLOR: dict[str, str] = {
+    'Gep': 'purple'
+}
+
+MODEL_NODE_PEN_WIDTH: dict[str, str] = {
+    'Gep': '2'
+}
+
+
 class ModelNode:
-    def __init__(self, id: int, label: str = '(none)') -> None:
+    def __init__(self, id: int, pattern: str, vfg_path_slice: list[VFGNode]) -> None:
         self.id = id
-        self.label = label
         self._lower_nodes: set[ModelNode] = set()
+        self.info = ''
+        self.update_info(pattern, vfg_path_slice)
 
-    @property
-    def lower_nodes(self) -> Iterator[ModelNode]:
-        yield from self._lower_nodes
-
-    def add_lower_nodes(self, node: ModelNode):
-        if node != self:
-            self._lower_nodes.add(node)
+    def update_info(self, pattern: str, vfg_path_slice: list[VFGNode]):
+        match pattern:
+            case 'GL':
+                self.type = 'Load'
+                load_vfg_node = vfg_path_slice[-1]
+                self.info = '.'.join(vfg_node.ptr for vfg_node in vfg_path_slice) + f' → {load_vfg_node.var}'
+            case 'GS':
+                self.type = 'Store'
+                store_vfg_node = vfg_path_slice[-1]
+                try:
+                    var = self.store_var
+                except AttributeError:
+                    var = store_vfg_node.var
+                self.info = var + ' → ' + '.'.join(vfg_node.ptr for vfg_node in vfg_path_slice)
+            case 'CS':
+                self.type = 'Store'
+                copy_vfg_node = vfg_path_slice[0]
+                store_vfg_node = vfg_path_slice[1]
+                self._store_var = copy_vfg_node.from_var
+                self.info = self.store_var + ' → ' + store_vfg_node.ptr
+            case 'AS' | 'Single':
+                self.type = vfg_path_slice[0].type
+                self.info = vfg_path_slice[0].compiled_info
+            case _:
+                raise ValueError(f'Unknown pattern: {pattern}')
 
     def __eq__(self, other) -> bool:
         if isinstance(other, ModelNode):
@@ -30,8 +60,29 @@ class ModelNode:
     def __hash__(self) -> int:
         return hash(self.id)
 
+    def __repr__(self) -> str:
+        return self.type + f'({self.id})'
+
+    @property
+    def lower_nodes(self) -> Iterator[ModelNode]:
+        yield from self._lower_nodes
+
+    @property
+    def label(self) -> str:
+        return f'{self.type}({self.id})\\n{self.info}'
+
+    @property
+    def store_var(self) -> str:
+        return self._store_var
+
+    def add_lower_nodes(self, node: ModelNode):
+        if node != self:
+            self._lower_nodes.add(node)
+
 
 class Model:
+    pattern = re.compile('(?<=a|l)(?P<GL>g+l)|(?P<GS>g+s)|(?P<AS>as)|(?P<CS>cs)|.')
+
     def __init__(self, vfg: VFG, start_vfg_node_ids: Iterable[int]):
         self.vfg = vfg
         self.nodes = {}
@@ -40,14 +91,13 @@ class Model:
         for i, path in enumerate(paths):
             logger.debug('%d:', i + 1)
             logger.debug(', '.join(f'{node.type}({node.id})' for node in path))
-            logger.debug(''.join(str(node.t) for node in path))
-            model_nodes: list[ModelNode] = []
-            for vfg_node in path:
-                model_node = self.get_node(vfg_node.id)
-                model_node.label = vfg_node.label
-                model_nodes.append(model_node)
-            for upper_node, lower_node in pairwise(model_nodes):
-                upper_node.add_lower_nodes(lower_node)
+            logger.debug(''.join(node.t for node in path))
+            self._opt(path)
+
+        type_counts = Counter(node.type for node in self)
+        logger.info('Model counts:')
+        for type, count in type_counts.items():
+            logger.info('\t%s: %d', type, count)
 
     def __iter__(self) -> Iterator[ModelNode]:
         yield from sorted(self.nodes.values(), key=lambda node: node.id)
@@ -73,7 +123,8 @@ class Model:
             match current_vfg_node.type:
                 case 'ActualParm':
                     _connect_actual_param_ret(current_vfg_node)
-                case 'Store' | 'Addr':
+                # case 'Store' | 'Addr':
+                case 'Store':
                     source_sink_vfg_nodes.add(current_vfg_node)
             if current_vfg_node.lower_node_number == 0:
                 return
@@ -95,7 +146,7 @@ class Model:
                     paths.append(current_path)
                     logger.info('%d:', len(paths))
                     logger.info(', '.join(f'{node.type}({node.id})' for node in current_path))
-                    logger.info(''.join(str(node.t) for node in current_path))
+                    logger.info(''.join(node.t for node in current_path))
                     return
                 for lower_node in current_node.lower_nodes:
                     if lower_node not in current_path:
@@ -108,7 +159,7 @@ class Model:
                     paths.append(current_path)
                     logger.info('%d:', len(paths))
                     logger.info(', '.join(f'{node.type}({node.id})' for node in current_path))
-                    logger.info(''.join(str(node.t) for node in current_path))
+                    logger.info(''.join(node.t for node in current_path))
                     return
                 for upper_node in current_node.upper_nodes:
                     if upper_node not in current_path:
@@ -128,12 +179,77 @@ class Model:
 
         return paths
 
-    def get_node(self, id: int) -> ModelNode:
-        return self.nodes.setdefault(id, ModelNode(id))
+    def _no_opt(self, path: list[VFGNode]):
+        model_nodes: list[ModelNode] = []
+        for vfg_node in path:
+            model_node = self.get_node('Single', [vfg_node])
+            model_nodes.append(model_node)
+        for upper_node, lower_node in pairwise(model_nodes):
+            upper_node.add_lower_nodes(lower_node)
+
+    def _opt(self, vfg_path: list[VFGNode]):
+        logger.info('Opt VFG path: %s', ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path))
+        model_path: list[ModelNode] = []
+        need_reverse = False
+        for m in self.pattern.finditer(''.join(vfg_node.t for vfg_node in vfg_path)):
+            if m['GL']:
+                pattern = 'GL'
+                vfg_path_slice = vfg_path[m.start(pattern):m.end(pattern)]
+                logger.info('Pattern: %s[%s]', pattern, ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path_slice))
+                model_node = self.get_node(pattern, vfg_path_slice)
+                model_path.append(model_node)
+            elif m['GS']:
+                pattern = 'GS'
+                need_reverse = True
+                vfg_path_slice = vfg_path[m.start(pattern):m.end(pattern)]
+                logger.info('Pattern: %s[%s]', pattern, ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path_slice))
+                model_node = self.get_node(pattern, vfg_path_slice)
+                model_path.append(model_node)
+            elif m['AS']:
+                pattern = 'AS'
+                need_reverse = True
+                vfg_path_slice = vfg_path[m.start(pattern):m.end(pattern)]
+                logger.info('Pattern: %s[%s]', pattern, ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path_slice))
+                model_path.append(self.get_node(pattern, vfg_path_slice[:1]))
+                model_path.append(self.get_node(pattern, vfg_path_slice[1:]))
+            elif m['CS']:
+                pattern = 'CS'
+                vfg_path_slice = vfg_path[m.start(pattern):m.end(pattern)]
+                logger.info('Pattern: %s[%s]', pattern, ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path_slice))
+                model_node = self.get_node(pattern, vfg_path_slice)
+                model_path.append(model_node)
+            else:
+                pattern = 'Single'
+                vfg_path_slice = vfg_path[m.start():m.end()]
+                logger.info('Pattern: %s[%s]', pattern, ', '.join(f'{vfg_node.type}({vfg_node.id})' for vfg_node in vfg_path_slice))
+                model_path.append(self.get_node(pattern, vfg_path_slice))
+        if need_reverse:
+            model_path.reverse()
+        for upper_node, lower_node in pairwise(model_path):
+            upper_node.add_lower_nodes(lower_node)
+
+    def get_node(self, pattern: str, vfg_path_slice: list[VFGNode]) -> ModelNode:
+        match pattern:
+            case 'GL' | 'GS' | 'CS':
+                # Use ID of LoadVFGNode or StoreVFGNode
+                id = vfg_path_slice[-1].id
+            case 'AS' | 'Single':
+                # Use ID of AddrVFGNode or StoreVFGNode
+                id = vfg_path_slice[0].id
+            case _:
+                raise ValueError(f'Unknown pattern: {pattern}')
+        model_node: ModelNode = self.nodes.setdefault(id, ModelNode(id, pattern, vfg_path_slice))
+        model_node.update_info(pattern, vfg_path_slice)
+        return model_node
 
     def write(self, filename: str, name: str, label: str):
-        nodes: set[Node] = {Node(str(node.id), node.label) for node in self}
-        edges: set[Edge] = {Edge(str(node.id), str(lower_node.id)) for node in self for lower_node in node.lower_nodes}
+        nodes: set[Node] = {Node(str(node.id),
+                                 node.label,
+                                 color=MODEL_NODE_COLOR.get(node.type, 'black'),
+                                 penwidth=MODEL_NODE_PEN_WIDTH.get(node.type, '1')
+                                 ) for node in self}
+        edges: set[Edge] = {Edge(str(node.id),
+                                 str(lower_node.id)) for node in self for lower_node in node.lower_nodes}
         graph = Graph(nodes, edges, name, label)
         logger.info("Model size: %s", graph.size)
         graph.write(filename)
