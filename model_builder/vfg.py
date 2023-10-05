@@ -45,7 +45,7 @@ PATTERNS: dict[str, re.Pattern] = {
     'FormalParm': re.compile(r'\S+ (%\S+)'),
     'ActualParm': re.compile(r'(%\S+) = .+|\S+ (%\S+)'),
     'ActualRet': re.compile(r'(%\S+) = (call|invoke) .+ @(\S+)\((.+)\)'),
-    'BinaryOP': re.compile(r'(%\S+) = (fmul|fadd) .+ (%\S+), (%\S+)'),
+    'BinaryOP': re.compile(r'(%\S+) = (fmul|fadd) .+ (%\S+), (%\S+),'),
 }
 
 
