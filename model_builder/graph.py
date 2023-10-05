@@ -46,11 +46,13 @@ class Edge:
 
 
 DOT_PATTERNS: dict[str, re.Pattern] = {
-    'name': re.compile(r'digraph\s+"?([^"]*)"?\s*\{'),
+    'head': re.compile(r'digraph\s+"?([^"]*)"?\s*\{'),
+    'rankdir': re.compile(r'rankdir="([^"]*)"'),
     'label': re.compile(r'label="([^"]*)"'),
-    'node': re.compile(r'(Node0x[0-9a-f]+)\s*\[(.+)\];'),
-    'edge': re.compile(r'(Node0x[0-9a-f]+) -> (Node0x[0-9a-f]+)\s*\[(.+)\];'),
-    'attr': re.compile(r'(\w+)=((?:[^",]+)|(?:\"(?:\\\"|[^\"])*\"))')
+    'tail': re.compile(r'\}'),
+    'node': re.compile(r'(Node0x[0-9a-f]+)\s*\[(.+)\]'),
+    'edge': re.compile(r'(Node0x[0-9a-f]+) -> (Node0x[0-9a-f]+)\s*\[(.+)\]'),
+    'attr': re.compile(r'(\w+)=((?:[^",]+)|(?:"(?:"|[^"])*"))')
 }
 
 
@@ -84,50 +86,39 @@ class Graph:
     def from_file(cls, filename: str):
         nodes: set[Node] = set()
         edges: set[Edge] = set()
-        name: str | None = None
-        label: str | None = None
+        name: str = 'Graph'
+        label: str = 'Graph'
 
         with open(filename, mode='r', encoding="utf-8") as file:
-            for i, line in enumerate(file):
-                logger.debug("Reading file \"%s\": %d", filename, i + 1)
+            for i, line in enumerate(file, start=1):
+                logger.debug("Reading file \"%s\": %d", filename, i)
                 line = line.strip()
 
-                # Check if the line contains a node description
-                node_match = DOT_PATTERNS['node'].match(line)
-                if node_match:
-                    attr_match: list[str] = DOT_PATTERNS['attr'].findall(node_match[2])
-                    node_attrs = {key: value.strip('"') for key, value in attr_match}
-                    nodes.add(Node(name=node_match[1], **node_attrs))
+                if not line:
                     continue
 
-                # Check if the line contains an edge description
-                edge_match = DOT_PATTERNS['edge'].match(line)
-                if edge_match:
-                    attr_match: list[str] = DOT_PATTERNS['attr'].findall(edge_match[3])
-                    edge_attrs = {key: value.strip('"') for key, value in attr_match}
-                    edges.add(Edge(edge_match[1], edge_match[2], **edge_attrs))
+                for pattern_name, pattern in DOT_PATTERNS.items():
+                    match = pattern.match(line)
+                    if match:
+                        break
+                else:
+                    raise ValueError(f"Unrecognized line: {line}")
+
+                if pattern_name == 'node':
+                    attr_match: list[tuple[str,str]] = DOT_PATTERNS['attr'].findall(match[2])
+                    nodes.add(Node(name=match[1], **{key: value.strip('"') for key, value in attr_match}))
+                elif pattern_name == 'edge':
+                    attr_match: list[tuple[str,str]] = DOT_PATTERNS['attr'].findall(match[3])
+                    edges.add(Edge(match[1], match[2], **{key: value.strip('"') for key, value in attr_match}))
+                elif pattern_name == 'head':
+                    name = match[1]
+                elif pattern_name == 'rankdir':
+                    pass
+                elif pattern_name == 'label':
+                    label = match[1]
+                elif pattern_name == 'tail':
                     continue
+                else:
+                    raise ValueError(f"Unknown pattern name: {pattern_name}")
 
-                name_match = DOT_PATTERNS['name'].match(line)
-                if name_match:
-                    name = name_match[1]
-                    continue
-
-                label_match = DOT_PATTERNS['label'].match(line)
-                if label_match:
-                    label = label_match[1]
-                    continue
-
-                graph_attr_match = DOT_PATTERNS['attr'].match(line)
-                if graph_attr_match:
-                    continue
-
-                if not line or line == '}':
-                    continue
-
-                raise ValueError(f"Unrecognized line: {line}")
-
-        return cls(nodes,
-                   edges,
-                   name=name if name else 'Graph',
-                   label=label if label else 'Graph')
+        return cls(nodes, edges, name=name, label=label)
