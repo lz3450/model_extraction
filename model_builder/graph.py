@@ -89,9 +89,10 @@ class Graph:
         name: str = 'Graph'
         label: str = 'Graph'
 
+        logger.info("Reading file \"%s\"", filename)
         with open(filename, mode='r', encoding="utf-8") as file:
             for i, line in enumerate(file, start=1):
-                logger.debug("Reading file \"%s\": %d", filename, i)
+                logger.debug("\tline %d", i)
                 line = line.strip()
 
                 if not line:
@@ -105,10 +106,10 @@ class Graph:
                     raise ValueError(f"Unrecognized line: {line}")
 
                 if pattern_name == 'node':
-                    attr_match: list[tuple[str,str]] = DOT_PATTERNS['attr'].findall(match[2])
+                    attr_match: list[tuple[str, str]] = DOT_PATTERNS['attr'].findall(match[2])
                     nodes.add(Node(name=match[1], **{key: value.strip('"') for key, value in attr_match}))
                 elif pattern_name == 'edge':
-                    attr_match: list[tuple[str,str]] = DOT_PATTERNS['attr'].findall(match[3])
+                    attr_match: list[tuple[str, str]] = DOT_PATTERNS['attr'].findall(match[3])
                     edges.add(Edge(match[1], match[2], **{key: value.strip('"') for key, value in attr_match}))
                 elif pattern_name == 'head':
                     name = match[1]
