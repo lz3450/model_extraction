@@ -1,9 +1,11 @@
+__pycache__
 collected_compile_commands
 ir
 tmp
-__pycache__
+
 *.ll
 *.bc
 *.dot
 *.txt
 *.svg
+*.ipynb
