@@ -1,7 +1,15 @@
+################################################################################
+# VFG Node  -   Attributes
+# ADDR      -   {self.var_type} {self.ptr}
+# Gep       -   {ptr}.{elementptr}
+################################################################################
+
+
 from __future__ import annotations
 from typing import Iterator
 import re
 import subprocess
+from tqdm import tqdm
 
 from .graph import Node, Edge, Graph
 from .log import get_logger
@@ -100,8 +108,7 @@ class VFGNode:
                     self._ptr = match.group(1)
                     return f"{self._var_type} {self._ptr}"
             case 'Load':
-                match = PATTERNS[self.type].match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     self._ptr = match.group(2)
                     self._var = match.group(1)
                     return f'{self._ptr} → {self._var}'
@@ -111,9 +118,7 @@ class VFGNode:
                     self._ptr = match[2]
                     return f'{self._var} → {self._ptr}'
             case 'Gep':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     self._elementptr = match.group(1)
                     self._ptr = match.group(4)
                     return f'{self._ptr}.{self._elementptr}'
@@ -123,37 +128,30 @@ class VFGNode:
                     self._to_var = match[1]
                     return f'{self._from_var} → {self._to_var}'
             case 'FormalParm':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     self._parm = match.group(1)
                     return self._parm
             case 'ActualParm':
-                pattern = PATTERNS[self.type]
-                match = pattern.match(self.ir)
-                if match:
+                if match := PATTERNS[self.type].match(self.ir):
                     group1, group2 = match.groups()
                     self._parm = group1 if group1 else group2
                     return self._parm
             case 'FormalRet':
                 return self.function
             case 'ActualRet':
+                self._args: list[str] = []
                 if match := PATTERNS[self.type].match(self.ir):
-                    self._retval = match.group(1)
-                    self._fnptrval = match.group(3)
-                    args = match.group(4)
-                    arg_labels = []
-                    arg_pattern = PATTERNS['FunctionArgs']
+                    self._retval = match[1]
+                    self._fnptrval = match[3]
+                    args = match[4]
                     for arg in args.split(', '):
-                        arg_match = arg_pattern.match(arg)
-                        if arg_match:
-                            arg_labels.append(arg_match.group(1))
-                    self._args = tuple(arg_labels)
-                    return f"{self._retval} = {VFGNode.demangle(self._fnptrval)}({', '.join(arg_labels)})"
+                        if arg_match := PATTERNS['FunctionArgs'].match(arg):
+                            self._args.append(arg_match[1])
+                    return f"{self._retval} = {VFGNode.demangle(self._fnptrval)}({', '.join(self._args)})"
             case 'BinaryOP':
                 if match := PATTERNS[self.type].match(self.ir):
-                    self._parms = (match[3], match[4])
-                    return f'{match[1]} = {match[2]}({", ".join(self._parms)})'
+                    self._binary_op_parms = (match[3], match[4])
+                    return f'{match[2]}({", ".join(self._binary_op_parms)}) → {match[1]}'
             case 'UnaryOP':
                 pass
             case 'IntraPHI':
@@ -174,7 +172,7 @@ class VFGNode:
                 pass
             case _:
                 raise ValueError(f'Unknown VFG node type {self.type}')
-        return '\\n'.join(self.info)
+        return r'\n'.join(self.info)
 
     def __repr__(self) -> str:
         return f'{self.type}({self.id}, {self.name})'
@@ -222,10 +220,10 @@ class VFGNode:
         return self._parm
 
     @property
-    def parms(self) -> str:
+    def parms(self) -> tuple[str, str]:
         if self.t != 'b':
             raise AttributeError(f'"{self.type}" does not have `parms` attribute.')
-        return str(self._parms)
+        return self._binary_op_parms
 
     @property
     def retval(self) -> str:
@@ -234,7 +232,7 @@ class VFGNode:
         return self._retval
 
     @property
-    def args(self) -> tuple:
+    def args(self) -> list[str]:
         if self.t != '>':
             raise AttributeError(f'"{self.type}" does not have `args` attribute.')
         return self._args
@@ -258,8 +256,8 @@ class VFGNode:
 
 class VFG:
     def __init__(self, graph: Graph) -> None:
-        self.nodes: dict[str, VFGNode] = {node.name: VFGNode(node) for node in graph.nodes}
-        for edge in graph.edges:
+        self.nodes: dict[str, VFGNode] = {node.name: VFGNode(node) for node in tqdm(graph.nodes, bar_format='{l_bar}{bar:50}{r_bar}', unit=' nodes')}
+        for edge in tqdm(graph.edges, bar_format='{l_bar}{bar:50}{r_bar}', unit=' edges'):
             self.nodes[edge.source].add_lower_nodes(self.nodes[edge.target])
             self.nodes[edge.target].add_upper_nodes(self.nodes[edge.source])
 
